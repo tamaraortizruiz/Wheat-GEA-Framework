@@ -1,0 +1,42 @@
+---
+title: "SampleSet"
+output: html_document
+---
+
+```{r} 
+library(dplyr)
+metadata <- read.csv("RawData/metadata_BW.csv")
+
+# sampling 10% of each country
+set.seed(10)
+metadata_dev <- metadata %>%
+  group_by(Country) %>%
+  sample_frac(0.05) %>%
+  ungroup()
+
+write.csv(metadata_dev, "RawData/sample_metadata.csv", row.names = FALSE)
+
+x <- read.csv("RawData/sample_metadata.csv")
+```
+
+
+```{r}
+bim <- read.table("Data/Wheat_all_qc.bim", stringsAsFactors = FALSE)
+colnames(bim) <- c("chr", "snp", "cm", "pos", "a1", "a2")
+
+set.seed(123)
+
+dev_snps <- bim %>%
+  group_by(chr) %>%
+  group_modify(~ slice_sample(.x, n = min(500, nrow(.x)))) %>%
+  ungroup() %>%
+  pull(snp)
+
+write.table(
+  dev_snps,
+  "RawData/sample_snps.txt",
+  quote = FALSE,
+  row.names = FALSE,
+  col.names = FALSE
+)
+```

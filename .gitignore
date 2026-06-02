@@ -1,0 +1,50 @@
+# Quarto / R Markdown
+*.html
+
+# Compressed files
+*.gz
+*.zip
+*.tar
+*.tar.gz
+
+# R objects
+*.rds
+*.RDS
+*.bk
+
+# Genotype files
+*.bed
+*.bim
+*.fam
+*.nosex
+*.log
+
+# Intermediate data
+Data/*
+!Data/README.md
+
+# Outputs
+Output/*
+!Output/README.md
+
+# Logs
+Logs/*
+!Logs/README.md
+
+# Raw data
+RawData/*
+!RawData/README.md
+
+# R files
+.Rhistory
+.RData
+.Rproj.user/
+
+# macOS
+.DS_Store
+
+# Temporary files
+*.tmp
+*.swp
+*.RDataTmp
+*.RDataTmp1

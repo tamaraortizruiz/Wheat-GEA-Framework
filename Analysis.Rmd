@@ -1,0 +1,262 @@
+---
+title: "Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Importing functions
+function_files <- list.files("Functions", pattern = "\\.R$", full.names = TRUE)
+invisible(lapply(sort(function_files), source))
+
+# Importing config file
+config <- read_yaml("config.yaml")
+
+# Creating project directories
+create_project_dirs(overwrite = config$run$overwrite)
+
+run_qc <- isTRUE(config$analysis$run_qc)
+run_climate <- isTRUE(config$analysis$run_climate)
+run_ld_pruning <- isTRUE(config$analysis$run_ld_pruning)
+run_pca <- isTRUE(config$analysis$run_pca)
+run_lmm <- isTRUE(config$analysis$run_lmm)
+```
+
+# Quality Control
+## Filtering
+```{r, eval = run_qc, include = run_qc}
+keep_file <- NULL
+
+if (config$subsetting$use_keep) {
+  subset_metadata <- read.csv(config$subsetting$sample_metadata, stringsAsFactors = FALSE)
+  
+  keep_file <- create_keep_file(
+    metadata = subset_metadata,
+    fam_file = paste0(config$genotype$input_prefix, ".fam"),
+    output_file = config$subsetting$keep_file,
+    sample_col = config$metadata$sample_col
+  )
+}
+
+# Filtering by general QC thresholds
+qc_files <- paste0(config$outputs$qc_prefix, c(".bed", ".bim", ".fam"))
+
+if (!config$run$overwrite && all(file.exists(qc_files))) {
+  message("Reusing existing QC PLINK files: ", config$outputs$qc_prefix)
+  qc_prefix <- config$outputs$qc_prefix
+} else {
+  qc_prefix <- plink_filter(
+    input = config$genotype$input_prefix,
+    output = config$outputs$qc_prefix,
+    plink = config$plink$path,
+    keep = keep_file,
+    geno_na = config$qc$geno_na,
+    maf = config$qc$maf,
+    ind_na = config$qc$ind_na
+  )
+}
+
+# extracting markers if required
+if (isTRUE(config$marker_subsetting$use_extract)) {
+  qc_prefix <- plink_extract_markers(
+    input = qc_prefix,
+    output = config$marker_subsetting$output_prefix,
+    plink = config$plink$path,
+    extract_file = config$marker_subsetting$extract_file,
+    overwrite = config$run$overwrite
+  )
+}
+
+# Filtering metadata to filtered genotype data
+metadata <- filter_metadata(
+  metadata_file = config$metadata$file,
+  fam_file = paste0(qc_prefix, ".fam"),
+  sample_col = config$metadata$sample_col,
+  output_file = config$metadata$filtered_file
+)
+```
+
+```{r}
+# In case QC module is not ran
+if (!exists("qc_prefix")) {
+  qc_prefix <- config$outputs$qc_prefix
+  qc_files <- paste0(qc_prefix, c(".bed", ".bim", ".fam"))
+  if (!all(file.exists(qc_files))) {
+    message("QC was not run and QC files were not found. Using raw genotype prefix.")
+    qc_prefix <- config$genotype$input_prefix
+  } else {
+    message("QC was not run. Reusing existing QC files: ", qc_prefix)
+  }
+}
+```
+
+# Environmental Variables
+## Climate Variables
+```{r, eval = run_climate, include = run_climate}
+# Extracting climate variables
+climate_data <- extract_climate_variables(
+  metadata = metadata,
+  lon_col = config$climate$lon_col,
+  lat_col = config$climate$lat_col,
+  sample_col = config$metadata$sample_col,
+  var = config$climate$var,
+  res = config$climate$res,
+  climate_dir = config$climate$path,
+  output_file = config$climate$output_file,
+  overwrite = config$run$overwrite
+)
+
+head(climate_data)
+```
+
+## Refiltering
+```{r, eval = run_climate, include = run_climate}
+# Refiltering genotype data to match samples with climate variables
+climate_keep_file <- create_keep_file(
+  metadata = climate_data,
+  fam_file = paste0(qc_prefix, ".fam"),
+  output_file = config$climate$keep_file,
+  sample_col = config$metadata$sample_col
+)
+
+climate_files <- paste0(config$outputs$climate_prefix, c(".bed", ".bim", ".fam"))
+if (!config$run$overwrite && all(file.exists(climate_files))) {
+  message("Reusing climate-filtered PLINK files: ", config$outputs$climate_prefix)
+  qc_prefix <- config$outputs$climate_prefix
+} else {
+  qc_prefix <- plink_filter(
+    input = qc_prefix,
+    output = config$outputs$climate_prefix,
+    plink = config$plink$path,
+    keep = climate_keep_file,
+    geno_na = config$qc$geno_na,
+    maf = config$qc$maf,
+    ind_na = NULL
+  )
+}
+
+# Refiltering metadata
+metadata <- filter_metadata(
+  metadata_file = config$metadata$file,
+  fam_file = paste0(qc_prefix, ".fam"),
+  sample_col = config$metadata$sample_col,
+  output_file = config$metadata$filtered_file
+)
+
+message("Samples after genotype-climate matching: ", nrow(metadata))
+```
+
+## Climatic Data QC
+### Variable Distribution
+```{r, eval = run_climate, include = run_climate}
+plot_climate_map(
+  climate_data = climate_data,
+  metadata = metadata,
+  sample_col = config$metadata$sample_col,
+  lon_col = config$climate$lon_col,
+  lat_col = config$climate$lat_col,
+  color_col = "BIO1"
+)
+```
+
+### Correlation
+```{r, eval = run_climate, include = run_climate}
+plot_climate_cor_heatmap(
+  climate_data = climate_data
+)
+```
+
+### Climate PCA
+```{r, eval = run_climate, include = run_climate}
+climate_pca <- run_climate_pca(
+  climate_data = climate_data,
+  output_file = "Output/Structure/climate_pca.rds"
+)
+
+plot_climate_pca(climate_pca)
+```
+
+
+# Population Structure
+## LD-pruning
+```{r, eval = run_ld_pruning, include = run_ld_pruning}
+ld_files <- paste0(config$outputs$ld_prefix, c(".bed", ".bim", ".fam"))
+
+if (!config$run$overwrite && all(file.exists(ld_files))) {
+  message("Reusing existing LD-pruned PLINK files: ", config$outputs$ld_prefix)
+  ld_prefix <- config$outputs$ld_prefix
+} else {
+  ld_prefix <- plink_ld_prune(
+    input = qc_prefix,
+    output = config$outputs$ld_prefix,
+    plink = config$plink$path,
+    window = config$ld_pruning$window,
+    step = config$ld_pruning$step,
+    r2 = config$ld_pruning$r2
+  )
+}
+
+# Loading LD-pruned PLINK data as bigSNP object
+ld_obj <- plink_to_bigSNP(
+  bed_file = paste0(ld_prefix, ".bed"),
+  overwrite = config$run$overwrite
+)
+
+G_ld <- ld_obj$genotypes
+map_ld <- ld_obj$map
+fam_ld <- ld_obj$fam
+```
+
+## PCA
+```{r, eval = run_pca, include = run_pca}
+pca_result <- run_pca_bigsnpr(
+  obj = ld_obj,
+  n_pcs = config$pca$n_pcs,
+  output_file = config$pca$output_file,
+  covariates_file = config$pca$covariates_file,
+  ncores = config$pca$ncores
+)
+
+pca_plot <- plot_pca(
+  pca_result = pca_result,
+  metadata = metadata,
+  sample_col = config$metadata$sample_col,
+  color_col = NULL,
+  pc_x = 1,
+  pc_y = 2
+)
+
+pca_plot
+```
+
+# GEA
+## LMM (GEMMA)
+```{r, eval = run_lmm, include = run_lmm}
+# GEMMA kinship matrix
+gemma_kinship_file <- run_gemma_kinship(
+  gemma = config$gemma$path,
+  bfile = qc_prefix,
+  output_prefix = config$gemma$kinship_prefix,
+  output_dir = config$gemma$output_dir,
+  overwrite = config$run$overwrite
+)
+```
+
+```{r, eval = run_lmm, include = run_lmm}
+gemma_results <- run_gemma_lmm_strategies(
+  config = config,
+  qc_prefix = qc_prefix,
+  climate_data = climate_data,
+  phenotype = config$gemma$phenotype,
+  kinship_file = gemma_kinship_file
+)
+
+gemma_results$evaluation
+gemma_results$best_strategy
+```
+
+```{r}
+plot_gemma_qq(gemma_results$results, strategy = "kinship_only")
+plot_gemma_qq(gemma_results$results, strategy = "kinship_3PCs")
+plot_gemma_qq(gemma_results$results, strategy = "kinship_5PCs")
+```
+

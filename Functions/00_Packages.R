@@ -1,0 +1,13 @@
+#---- Packages ----
+library(bigsnpr)
+library(bigstatsr)
+library(dplyr)
+library(yaml)
+library(ggplot2)
+library(adegenet)
+library(statgenGWAS)
+library(ade4)
+library(terra)
+library(geodata)
+library(rnaturalearth)
+library(rnaturalearthdata)

@@ -1,0 +1,80 @@
+project:
+  name: wheat_GEA_pipeline
+  
+run:
+  overwrite: true
+
+plink:
+  path: "/Users/tamaraortiz/plink_mac_20250819/plink"
+
+genotype:
+  input_prefix: "RawData/Wheat_all"
+  input_fam: "RawData/Wheat_all.fam"
+
+metadata:
+  file: "RawData/metadata_BW.csv"
+  sample_col: "SeedID"
+  population_col: "PopulationType"
+  country_col: "Country"
+  filtered_file: "Data/filtered_metadata.rds"
+  
+subsetting:
+  use_keep: true
+  sample_metadata: "RawData/sample_metadata.csv"
+  keep_file: "Data/sample_keep.txt"
+
+marker_subsetting:
+  use_extract: true
+  extract_file: "RawData/sample_snps.txt"
+  output_prefix: "Data/Wheat_all_qc_marker_sample"
+
+outputs:
+  qc_prefix: "Data/Wheat_all_qc"
+  qc_bed: "Data/Wheat_all_qc.bed"
+  qc_fam: "Data/Wheat_all_qc.fam"
+  climate_prefix: "Data/Wheat_all_qc_climate"
+  ld_prefix: "Data/Wheat_all_qc_ldpruned"
+  qc_numeric_matrix: "Data/Wheat_all_qc_climate_numeric_matrix.rds"
+  ld_numeric_matrix: "Data/Wheat_all_ld_climate_numeric_matrix.rds"
+
+analysis:
+  run_qc: true
+  run_climate: true
+  run_ld_pruning: true
+  run_pca: true
+  run_lmm: true
+
+qc:
+  geno_na: 0.10
+  maf: 0.01
+  ind_na: 0.10
+  
+climate:
+  var: "bio"
+  res: 5
+  path: "Data/Climate"
+  output_file: "Data/climate_variables.csv"
+  lon_col: "Longitude"
+  lat_col: "Latitude"
+  keep_file: "Data/climate_keep.txt"
+
+ld_pruning:
+  window: 50
+  step: 10
+  r2: 0.2
+
+pca:
+  n_pcs: 10
+  ncores: 1
+  output_file: "Output/Structure/pca_ldpruned.rds"
+  covariates_file: "Output/Structure/pca_covariates.csv"
+
+gemma:
+  path: "/opt/anaconda3/envs/gemma_x86/bin/gemma"
+  output_dir: "Output/GEA/GEMMA"
+  output_prefix: "BIO1_LMM"
+  kinship_prefix: "wheat_kinship"
+  phenotype: "BIO1"
+  phenotype_file: "Data/GEMMA/pheno_BIO1.txt"
+  covariates_file: "Output/Structure/pca_covariates_gemma.txt"
+  
