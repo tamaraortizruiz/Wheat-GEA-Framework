@@ -209,18 +209,18 @@ run_climate_pca <- function(
   # PCA
   env_pca <- prcomp(env_data, center = TRUE, scale. = TRUE)
   
-  # Calculating variance explained
+  # Calculate variance explained
   variance <- data.frame(
     PC = paste0("EnvPC", seq_along(env_pca$sdev)),
     Variance = (env_pca$sdev^2 / sum(env_pca$sdev^2)) * 100,
     CumulativeVariance = cumsum((env_pca$sdev^2 / sum(env_pca$sdev^2)) * 100)
   )
   
-  # Extracting PC scores
+  # Extract PC scores
   scores <- as.data.frame(env_pca$x)
   colnames(scores) <- paste0("EnvPC", seq_len(ncol(scores)))
   
-  # Calculating variable loadings
+  # Calculate variable loadings
   loadings <- as.data.frame(env_pca$rotation)
   colnames(loadings) <- paste0("EnvPC", seq_len(ncol(loadings)))
   loadings$Variable <- rownames(loadings)

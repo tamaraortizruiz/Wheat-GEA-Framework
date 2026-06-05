@@ -31,12 +31,12 @@ run_pca_bigsnpr <- function(
                        fun.scaling = snp_scaleBinom(),
                        ncores = ncores)
   
-  # Saving scores
+  # Save scores
   scores <- as.data.frame(pca$u)
   colnames(scores) <- paste0("PC", seq_len(ncol(scores)))
   scores$sample.ID <- fam$sample.ID
   
-  # Saving explained variances per each PC
+  # Save explained variances per each PC
   variance_df <- data.frame(
     PC = paste0("PC", seq_along(pca$d)),
     Eigenvalue = pca$d^2,
@@ -44,10 +44,10 @@ run_pca_bigsnpr <- function(
     CumulativeVariance = cumsum((pca$d^2 / sum(pca$d^2)) * 100)
   )
   
-  # Extracting covariates
+  # Extract covariates
   covariates <- scores[, c("sample.ID", paste0("PC", seq_len(n_pcs))), drop = FALSE]
   
-  # Saving results
+  # Save results
   result <- list(
     pca = pca,
     scores = scores,
@@ -93,25 +93,25 @@ plot_pca <- function(
     pc_y = 2
 ) {
   
-  # Extracting scores and variance
+  # Extract scores and variance
   scores <- pca_result$scores
   variance <- pca_result$variance
   
-  # Selecting PCs for each axis
+  # Select PCs for each axis
   x_col <- paste0("PC", pc_x)
   y_col <- paste0("PC", pc_y)
   
   if (!is.null(metadata)) {
-    # Extracts individuals
+    # Extract individuals
     metadata[[sample_col]] <- as.character(metadata[[sample_col]])
     scores$sample.ID <- as.character(scores$sample.ID)
     
-    # Joins individuals to scores
+    # Join individuals to scores
     scores <- left_join(scores, metadata,
                         by = setNames(sample_col, "sample.ID"))
   }
   
-  # Adding variances to axis labels
+  # Add variances to axis labels
   x_lab <- paste0(x_col, " (", round(variance$Variance[pc_x], 2), "%)")
   y_lab <- paste0(y_col, " (", round(variance$Variance[pc_y], 2), "%)")
   

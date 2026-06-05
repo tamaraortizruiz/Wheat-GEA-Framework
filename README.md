@@ -39,7 +39,6 @@ This project implements a modular workflow for identifying genomic variants asso
 RawData/     Input genotype and metadata files (not tracked by Git)
 Data/        Intermediate files generated during analysis (not tracked by Git)
 Output/      Analysis results, figures, and summary tables (not tracked by Git)
-Logs/        Execution logs and software outputs (not tracked by Git)
 Functions/   Modular R functions used throughout the pipeline
 ```
 
@@ -66,7 +65,7 @@ This file contains:
 - Quality control thresholds
 - Climate extraction settings
 - Population structure parameters
-- GEMMA, LFMM, RDA, and pcadapt settings
+- LMM, LFMM, RDA, and pcadapt settings
 - Consensus analysis options
 
 ## Current Status

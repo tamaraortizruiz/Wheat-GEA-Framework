@@ -407,6 +407,7 @@ plink_to_nummat <- function(
     obj = obj
   )
   
+  # Create result list
   result <- list(
     obj = obj,
     G = G_matrix,
@@ -430,4 +431,18 @@ plink_to_nummat <- function(
   message("Markers: ", ncol(G_matrix))
   
   return(result)
+}
+
+# count_plink_dataset()
+# Returns number of samples and SNPs in a PLINK dataset
+# prefix = PLINK file prefix
+# Returns: data frame of samples and SNPs
+count_plink_dataset <- function(prefix) {
+  fam <- read.table(paste0(prefix, ".fam"), header = FALSE, stringsAsFactors = FALSE)
+  bim <- read.table(paste0(prefix, ".bim"), header = FALSE, stringsAsFactors = FALSE)
+  
+  data.frame(
+    Samples = nrow(fam),
+    SNPs = nrow(bim)
+  )
 }

@@ -2,7 +2,7 @@ project:
   name: wheat_GEA_pipeline
   
 run:
-  overwrite: true
+  overwrite: false
 
 plink:
   path: "/Users/tamaraortiz/plink_mac_20250819/plink"
@@ -43,6 +43,7 @@ analysis:
   run_ld_pruning: true
   run_pca: true
   run_lmm: true
+  run_lfmm: true
 
 qc:
   geno_na: 0.10
@@ -57,6 +58,7 @@ climate:
   lon_col: "Longitude"
   lat_col: "Latitude"
   keep_file: "Data/climate_keep.txt"
+  vars: ["BIO4"]
 
 ld_pruning:
   window: 50
@@ -72,9 +74,16 @@ pca:
 gemma:
   path: "/opt/anaconda3/envs/gemma_x86/bin/gemma"
   output_dir: "Output/GEA/GEMMA"
-  output_prefix: "BIO1_LMM"
+  output_prefix: "LMM"
+  pc_strategies: [0, 3, 5]
   kinship_prefix: "wheat_kinship"
-  phenotype: "BIO1"
-  phenotype_file: "Data/GEMMA/pheno_BIO1.txt"
+  phenotype_file: "Data/GEMMA/pheno.txt"
   covariates_file: "Output/Structure/pca_covariates_gemma.txt"
+  
+lfmm:
+  K_values: [2, 3, 4, 5]
+  output_dir: "Output/GEA/LFMM"
+  genomic_control: true
+  q_threshold: 0.05
+  
   

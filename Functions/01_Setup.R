@@ -11,6 +11,7 @@ create_project_dirs <- function(overwrite = FALSE) {
     "Output/Structure",
     "Output/GEA",
     "Output/GEA/GEMMA",
+    "Output/GEA/LFMM",
     "Output/Plots",
     "Logs"
   )

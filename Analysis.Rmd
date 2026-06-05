@@ -4,21 +4,23 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-# Importing functions
+# Imports functions
 function_files <- list.files("Functions", pattern = "\\.R$", full.names = TRUE)
 invisible(lapply(sort(function_files), source))
 
-# Importing config file
+# Imports config file
 config <- read_yaml("config.yaml")
 
-# Creating project directories
+# Creates project directories
 create_project_dirs(overwrite = config$run$overwrite)
 
+# Sets status for pipeline modules
 run_qc <- isTRUE(config$analysis$run_qc)
 run_climate <- isTRUE(config$analysis$run_climate)
 run_ld_pruning <- isTRUE(config$analysis$run_ld_pruning)
 run_pca <- isTRUE(config$analysis$run_pca)
 run_lmm <- isTRUE(config$analysis$run_lmm)
+run_lfmm <- isTRUE(config$analysis$run_lfmm)
 ```
 
 # Quality Control
@@ -26,9 +28,11 @@ run_lmm <- isTRUE(config$analysis$run_lmm)
 ```{r, eval = run_qc, include = run_qc}
 keep_file <- NULL
 
+# if filtering by samples
 if (config$subsetting$use_keep) {
+  # Reads metadata for subset
   subset_metadata <- read.csv(config$subsetting$sample_metadata, stringsAsFactors = FALSE)
-  
+  # Creates PLINK keep file
   keep_file <- create_keep_file(
     metadata = subset_metadata,
     fam_file = paste0(config$genotype$input_prefix, ".fam"),
@@ -37,13 +41,15 @@ if (config$subsetting$use_keep) {
   )
 }
 
-# Filtering by general QC thresholds
+# Filters by general QC thresholds
 qc_files <- paste0(config$outputs$qc_prefix, c(".bed", ".bim", ".fam"))
 
+# if overwrite = FALSE and qc_files exist
 if (!config$run$overwrite && all(file.exists(qc_files))) {
   message("Reusing existing QC PLINK files: ", config$outputs$qc_prefix)
   qc_prefix <- config$outputs$qc_prefix
 } else {
+  # QC filters using PLINK
   qc_prefix <- plink_filter(
     input = config$genotype$input_prefix,
     output = config$outputs$qc_prefix,
@@ -55,7 +61,7 @@ if (!config$run$overwrite && all(file.exists(qc_files))) {
   )
 }
 
-# extracting markers if required
+# Extracts markers use_extract = TRUE
 if (isTRUE(config$marker_subsetting$use_extract)) {
   qc_prefix <- plink_extract_markers(
     input = qc_prefix,
@@ -66,7 +72,7 @@ if (isTRUE(config$marker_subsetting$use_extract)) {
   )
 }
 
-# Filtering metadata to filtered genotype data
+# Filters metadata to filtered genotype data
 metadata <- filter_metadata(
   metadata_file = config$metadata$file,
   fam_file = paste0(qc_prefix, ".fam"),
@@ -80,6 +86,7 @@ metadata <- filter_metadata(
 if (!exists("qc_prefix")) {
   qc_prefix <- config$outputs$qc_prefix
   qc_files <- paste0(qc_prefix, c(".bed", ".bim", ".fam"))
+  # if files do not exist
   if (!all(file.exists(qc_files))) {
     message("QC was not run and QC files were not found. Using raw genotype prefix.")
     qc_prefix <- config$genotype$input_prefix
@@ -90,9 +97,9 @@ if (!exists("qc_prefix")) {
 ```
 
 # Environmental Variables
-## Climate Variables
+## Extracting climatic variables
 ```{r, eval = run_climate, include = run_climate}
-# Extracting climate variables
+# Extracts climate variables
 climate_data <- extract_climate_variables(
   metadata = metadata,
   lon_col = config$climate$lon_col,
@@ -108,9 +115,9 @@ climate_data <- extract_climate_variables(
 head(climate_data)
 ```
 
-## Refiltering
+## Refiltering genotype dataset
 ```{r, eval = run_climate, include = run_climate}
-# Refiltering genotype data to match samples with climate variables
+# Refilters genotype data to match samples with climatic variables
 climate_keep_file <- create_keep_file(
   metadata = climate_data,
   fam_file = paste0(qc_prefix, ".fam"),
@@ -119,10 +126,13 @@ climate_keep_file <- create_keep_file(
 )
 
 climate_files <- paste0(config$outputs$climate_prefix, c(".bed", ".bim", ".fam"))
+
+# if overwrite = FALSE and climate filtered files exist
 if (!config$run$overwrite && all(file.exists(climate_files))) {
   message("Reusing climate-filtered PLINK files: ", config$outputs$climate_prefix)
   qc_prefix <- config$outputs$climate_prefix
 } else {
+  # QC filters using PLINK
   qc_prefix <- plink_filter(
     input = qc_prefix,
     output = config$outputs$climate_prefix,
@@ -134,7 +144,7 @@ if (!config$run$overwrite && all(file.exists(climate_files))) {
   )
 }
 
-# Refiltering metadata
+# Refilters metadata to match genotype data
 metadata <- filter_metadata(
   metadata_file = config$metadata$file,
   fam_file = paste0(qc_prefix, ".fam"),
@@ -145,9 +155,10 @@ metadata <- filter_metadata(
 message("Samples after genotype-climate matching: ", nrow(metadata))
 ```
 
-## Climatic Data QC
-### Variable Distribution
+## Climatic Data Distribution
+### Geographic distribution
 ```{r, eval = run_climate, include = run_climate}
+# Plots geographic distribution of climate variables
 plot_climate_map(
   climate_data = climate_data,
   metadata = metadata,
@@ -160,6 +171,7 @@ plot_climate_map(
 
 ### Correlation
 ```{r, eval = run_climate, include = run_climate}
+# Plots a correlation heatmap of climate variables
 plot_climate_cor_heatmap(
   climate_data = climate_data
 )
@@ -167,24 +179,27 @@ plot_climate_cor_heatmap(
 
 ### Climate PCA
 ```{r, eval = run_climate, include = run_climate}
+# Runs PCA of climate variables
 climate_pca <- run_climate_pca(
   climate_data = climate_data,
   output_file = "Output/Structure/climate_pca.rds"
 )
 
+# Plots PCA
 plot_climate_pca(climate_pca)
 ```
-
 
 # Population Structure
 ## LD-pruning
 ```{r, eval = run_ld_pruning, include = run_ld_pruning}
 ld_files <- paste0(config$outputs$ld_prefix, c(".bed", ".bim", ".fam"))
 
+# if overwrite = FALSE and ld_files exist
 if (!config$run$overwrite && all(file.exists(ld_files))) {
   message("Reusing existing LD-pruned PLINK files: ", config$outputs$ld_prefix)
   ld_prefix <- config$outputs$ld_prefix
 } else {
+  # Filters genotype data with LD
   ld_prefix <- plink_ld_prune(
     input = qc_prefix,
     output = config$outputs$ld_prefix,
@@ -194,20 +209,17 @@ if (!config$run$overwrite && all(file.exists(ld_files))) {
     r2 = config$ld_pruning$r2
   )
 }
+```
 
+## PCA
+```{r, eval = run_pca, include = run_pca}
 # Loading LD-pruned PLINK data as bigSNP object
 ld_obj <- plink_to_bigSNP(
   bed_file = paste0(ld_prefix, ".bed"),
   overwrite = config$run$overwrite
 )
 
-G_ld <- ld_obj$genotypes
-map_ld <- ld_obj$map
-fam_ld <- ld_obj$fam
-```
-
-## PCA
-```{r, eval = run_pca, include = run_pca}
+# Runs PCA on genotype data
 pca_result <- run_pca_bigsnpr(
   obj = ld_obj,
   n_pcs = config$pca$n_pcs,
@@ -216,6 +228,7 @@ pca_result <- run_pca_bigsnpr(
   ncores = config$pca$ncores
 )
 
+# Plots PCA
 pca_plot <- plot_pca(
   pca_result = pca_result,
   metadata = metadata,
@@ -229,9 +242,20 @@ pca_plot
 ```
 
 # GEA
+```{r}
+# Genotype dataset dimensions throughout quality-control and preprocessing
+qc_summary <- rbind(
+  cbind(Stage = "Raw", count_plink_dataset(config$genotype$input_prefix)),
+  cbind(Stage = "After QC", count_plink_dataset(config$outputs$qc_prefix)),
+  cbind(Stage = "After climate filtering", count_plink_dataset(config$outputs$climate_prefix)),
+  cbind(Stage = "After LD pruning", count_plink_dataset(config$outputs$ld_prefix)))
+
+qc_summary
+```
+
 ## LMM (GEMMA)
 ```{r, eval = run_lmm, include = run_lmm}
-# GEMMA kinship matrix
+# Creates GEMMA kinship matrix
 gemma_kinship_file <- run_gemma_kinship(
   gemma = config$gemma$path,
   bfile = qc_prefix,
@@ -242,21 +266,58 @@ gemma_kinship_file <- run_gemma_kinship(
 ```
 
 ```{r, eval = run_lmm, include = run_lmm}
-gemma_results <- run_gemma_lmm_strategies(
+# Runs GEMMA
+gemma_results <- run_gemma_lmm_all_variables(
   config = config,
   qc_prefix = qc_prefix,
   climate_data = climate_data,
-  phenotype = config$gemma$phenotype,
-  kinship_file = gemma_kinship_file
+  kinship_file = gemma_kinship_file,
+  phenotypes = config$climate$vars,
+  strategies = config$gemma$pc_strategies
 )
 
 gemma_results$evaluation
-gemma_results$best_strategy
+gemma_results$best_by_variable
+
+plot_gemma_qq(
+  results = gemma_results$results,
+  phenotype = gemma_results$best_by_variable$phenotype[1],
+  strategy = gemma_results$best_by_variable$strategy[1]
+)
 ```
 
-```{r}
-plot_gemma_qq(gemma_results$results, strategy = "kinship_only")
-plot_gemma_qq(gemma_results$results, strategy = "kinship_3PCs")
-plot_gemma_qq(gemma_results$results, strategy = "kinship_5PCs")
+## LFMM
+```{r, eval = run_lfmm, include = run_lfmm}
+# Creates genotype matrix for LMM
+qc_obj <- plink_to_bigSNP(
+  bed_file = paste0(qc_prefix, ".bed"),
+  overwrite = config$run$overwrite
+)
+
+G_qc <- qc_obj$genotypes
+map_qc <- qc_obj$map
+fam_qc <- qc_obj$fam
+
+# Runs LFMM
+lfmm_results <- run_lfmm_all_variables(
+  config = config,
+  geno = G_qc,
+  map = map_qc,
+  fam = fam_qc,
+  climate_data = climate_data,
+  phenotypes = config$climate$vars
+)
+
+lfmm_results$evaluation
+lfmm_results$best_by_variable
+
+plot_lfmm_qq(
+  results = lfmm_results$results,
+  phenotype = lfmm_results$best_by_variable$phenotype[1],
+  strategy = lfmm_results$best_by_variable$strategy[1]
+)
 ```
 
+## RDA
+
+## pcadapt
