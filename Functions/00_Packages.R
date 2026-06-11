@@ -1,4 +1,5 @@
-#---- Packages ----
+# ---- Packages ----
+
 library(bigsnpr)
 library(bigstatsr)
 library(dplyr)
@@ -13,3 +14,6 @@ library(geodata)
 library(rnaturalearth)
 library(rnaturalearthdata)
 library(LEA)
+library(reactable)
+library(vegan)
+library(pcadapt)

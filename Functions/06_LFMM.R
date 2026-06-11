@@ -1,19 +1,24 @@
+# ---- Latent Factor Mixed Model ----
 # impute_geno_mean()
 # Performs mean imputation of missing genotype values for each SNP
 # geno = Genotype matrix or bigsnpr genotype object with samples as rows and SNPs as columns
 # Output: Imputed genotype matrix
 # Returns: Imputed genotype matrix
 impute_geno_mean <- function(geno) {
+  # As matrix
   G <- as.matrix(geno[])
-  
+  # Calculate snp means
   snp_means <- colMeans(G, na.rm = TRUE)
   
+  # Replaces any NA by SNP mean
   for (j in seq_len(ncol(G))) {
     missing <- is.na(G[, j])
     if (any(missing)) {
       G[missing, j] <- snp_means[j]
     }
   }
+
+  # Return imputes matrix
   G
 }
 
@@ -35,10 +40,10 @@ prepare_lfmm_inputs <- function(
     phenotype,
     sample_col = "SeedID"
 ) {
+  
   # Convert sample IDs to characters for matching
   fam$sample.ID <- as.character(fam$sample.ID)
   climate_data[[sample_col]] <- as.character(climate_data[[sample_col]])
-  
   # Reorder to match climate data
   climate_ordered <- climate_data[match(fam$sample.ID, climate_data[[sample_col]]),]
   
@@ -51,6 +56,7 @@ prepare_lfmm_inputs <- function(
   env <- climate_ordered[[phenotype]]
   # Remove NAs
   keep <- !is.na(env)
+  # Filter
   geno_lfmm <- geno[keep, , drop = FALSE]
   fam_lfmm <- fam[keep, , drop = FALSE]
   env_lfmm <- scale(as.matrix(env[keep]))
@@ -61,11 +67,12 @@ prepare_lfmm_inputs <- function(
   geno_lfmm <- impute_geno_mean(geno_lfmm)
   
   # Remove SNPs with 0 variance
-  snp_var <- apply(geno_lfmm, 2, var)
+  snp_var <- apply(geno_lfmm, 2, stats::var)
   keep_snps <- !is.na(snp_var) & snp_var > 0
   
   message("Removing ", sum(!keep_snps), " zero-variance SNPs before LFMM.")
   
+  # Filter
   geno_lfmm <- geno_lfmm[, keep_snps, drop = FALSE]
   map_lfmm <- map[keep_snps, , drop = FALSE]
   
@@ -80,7 +87,7 @@ prepare_lfmm_inputs <- function(
 }
 
 # run_lfmm_single()
-# Runs LFMM2 GEA model
+# Runs a single LFMM2
 # geno = LFMM prepared genotype matrix
 # env = Scaled environmental matrix for one phenotype
 # map = Marker map matching genotype columns
@@ -90,7 +97,7 @@ prepare_lfmm_inputs <- function(
 # output_dir = Directory to write LFMM outputs
 # genomic_control = Whether to apply genomic control correction in lfmm2.test()
 # q_threshold = FDR threshold for significance
-# Output:SNP-level LFMM results table and model evaluation table saved as .csv
+# Output: SNP-level LFMM results table and model evaluation table saved as .csv
 # Returns: List containing results, evaluation, model, and test object
 run_lfmm_single <- function(
     geno,
@@ -101,7 +108,7 @@ run_lfmm_single <- function(
     output_prefix,
     output_dir = "Output/GEA/LFMM",
     genomic_control = TRUE,
-    q_threshold = 0.05
+    q_threshold = config$lfmm$q_threshold
 ) {
   
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
@@ -144,8 +151,7 @@ run_lfmm_single <- function(
     )
   
   # Genomic inflation factor
-  lambda_gc <- median(qchisq(1 - result$p_value, df = 1), na.rm = TRUE) /
-    qchisq(0.5, df = 1)
+  lambda_gc <- median(qchisq(1 - result$p_value, df = 1), na.rm = TRUE) / qchisq(0.5, df = 1)
   
   # Construct evaluation data frame
   evaluation <- data.frame(
@@ -161,11 +167,9 @@ run_lfmm_single <- function(
     bonferroni_threshold = unique(result$bonferroni_threshold)
   )
   
-  result_file <- file.path(output_dir, paste0(output_prefix, "_results.csv"))
-  eval_file <- file.path(output_dir, paste0(output_prefix, "_evaluation.csv"))
-  
-  write_csv(result, result_file)
-  write_csv(evaluation, eval_file)
+  # Write results
+  write_csv(result, file.path(output_dir, paste0(output_prefix, "_results.csv")))
+  write_csv(evaluation, file.path(output_dir, paste0(output_prefix, "_evaluation.csv")))
   
   list(
     results = result,
@@ -185,7 +189,7 @@ run_lfmm_single <- function(
 # phenotype = Environmental variable to test
 # Output: Combined LFMM results and evaluation tables for one phenotype
 # Returns: List containing results, evaluation, best_strategy, best_results,
-#          strategy results, and models
+#          strategy results and models
 run_lfmm_strategies <- function(
     config,
     geno,
@@ -194,6 +198,7 @@ run_lfmm_strategies <- function(
     climate_data,
     phenotype
 ) {
+  
   # Prepare the aligned genotype and environmental data
   lfmm_input <- prepare_lfmm_inputs(
     geno = geno,
@@ -239,19 +244,10 @@ run_lfmm_strategies <- function(
   results_all <- bind_rows(all_results)
   
   # Bind all result evaluation
-  evaluation_all <- bind_rows(all_eval) %>%
-    mutate(lambda_distance = abs(lambda_gc - 1)) %>%
-    arrange(
-      lambda_distance,
-      desc(n_bonferroni),
-      desc(n_fdr)
-    )
+  evaluation_all <- bind_rows(all_eval)
   
-  # Best strategy selected by:
-  # 1. λGC closest to 1
-  # 2. highest number of Bonferroni-significant SNPs
-  # 3. highest number of FDR-significant SNPs
-  best_strategy <- evaluation_all$strategy[1]
+  # Best strategy
+  best_strategy <- select_best_strategy(evaluation_all)$strategy[1]
   
   list(
     results = results_all,
@@ -263,8 +259,8 @@ run_lfmm_strategies <- function(
   )
 }
 
-# run_lfmm_all_variables()
-# Runs LFMM2 for all selected environmental variables
+# run_lfmm_all_variables(config, geno, map, fam, climate_data, phenotypes)
+# Runs LFMM across selected environmental variables and population structure correction strategies
 # config = Configuration list loaded from YAML
 # geno = Genotype matrix or bigsnpr genotype object
 # map = Marker map corresponding to genotype columns
@@ -273,7 +269,7 @@ run_lfmm_strategies <- function(
 # phenotypes = Vector of environmental variables to analyze
 # Output: .csv files of all results, all evaluation results and best strategy per variable
 # Returns: List containing results by variable, combined results,
-#          combined evaluation, and best_by_variable table
+#          combined evaluation and best_by_variable table
 run_lfmm_all_variables <- function(
     config,
     geno,
@@ -305,21 +301,13 @@ run_lfmm_all_variables <- function(
   
   # Bind all results
   combined_results <- bind_rows(lapply(lfmm_all, function(x) x$results))
-  
   # Bind all results evaluation
   combined_evaluation <- bind_rows(lapply(lfmm_all, function(x) x$evaluation))
-  combined_evaluation <- combined_evaluation %>%
-    mutate(lambda_distance = abs(lambda_gc - 1))
   
+  # Best strategy for each variable
   best_by_variable <- combined_evaluation %>%
     group_by(phenotype) %>%
-    arrange(
-      lambda_distance,
-      desc(n_bonferroni),
-      desc(n_fdr),
-      .by_group = TRUE
-    ) %>%
-    slice(1) %>%
+    group_modify(~ select_best_strategy(.x)) %>%
     ungroup()
   
   # Write results
@@ -335,47 +323,48 @@ run_lfmm_all_variables <- function(
   )
 }
 
-# plot_lfmm_qq()
-# Creates a QQ plot for LFMM p-values
+# plot_lfmm_qq(results, phenotype, p_col)
+# Creates a quantile-quantile (QQ) plot for all LFMM strategies
 # results = LFMM results table
 # phenotype = Environmental variable to plot
-# strategy = LFMM strategy to plot (by name)
-# p_col = Column name containing p-values
-# Output: QQ plot comparing expected and observed -log10(p-values)
+# p_col = Column containing p-values
+# Output: QQ plots comparing expected and observed -log10(p-values)
 # Returns: ggplot object
 plot_lfmm_qq <- function(
     results,
     phenotype,
-    strategy,
     p_col = "p_value"
 ) {
   
-  # Extract data for plotting
+  # Filter plot data for phenotype and valid p-value
   plot_data <- results %>%
-    filter(
-      phenotype == !!phenotype,
-      strategy == !!strategy,
-      !is.na(.data[[p_col]]),
-      .data[[p_col]] > 0,
-      .data[[p_col]] <= 1
-    )
+    filter(phenotype == !!phenotype,
+           !is.na(.data[[p_col]]), .data[[p_col]] > 0, .data[[p_col]] <= 1)
   
-  # Expected vs observed
-  observed <- -log10(sort(plot_data[[p_col]]))
-  expected <- -log10(ppoints(length(observed)))
-  
-  # Plot df
-  qq_df <- data.frame(
-    expected = expected,
-    observed = observed
-  )
+  # Create qq data frame grouped by strategy
+  qq_df <- plot_data %>%
+    group_by(strategy) %>%
+    # For each strategy, sorts p-values and creates expected vs observed values
+    group_modify(~{
+      pvals <- sort(.x[[p_col]])
+      data.frame(
+        expected = -log10(ppoints(length(pvals))),
+        observed = -log10(pvals)
+      )
+    }) %>%
+    ungroup()
   
   # Plot
   ggplot(qq_df, aes(x = expected, y = observed)) +
     geom_point(alpha = 0.6) +
-    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    geom_abline(
+      slope = 1,
+      intercept = 0,
+      linetype = "dashed"
+    ) +
+    facet_wrap(~ strategy) +
     labs(
-      title = paste("LFMM QQ plot:", phenotype, strategy),
+      title = paste("LFMM QQ plots:", phenotype),
       x = "Expected -log10(p)",
       y = "Observed -log10(p)"
     ) +

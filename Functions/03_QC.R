@@ -34,9 +34,18 @@ create_keep_file <- function(
     sample_col = "SeedID"
 ) {
   
+  # Import .fam file
   fam <- read.table(fam_file, header = FALSE, stringsAsFactors = FALSE)
-  colnames(fam) <- c("family.ID", "sample.ID", "paternal.ID", "maternal.ID", "sex", "phenotype")
-  
+  # Set column names
+  colnames(fam) <- c(
+    "family.ID",
+    "sample.ID",
+    "paternal.ID",
+    "maternal.ID",
+    "sex",
+    "phenotype"
+  )
+  # Format
   metadata[[sample_col]] <- as.character(metadata[[sample_col]])
   fam$sample.ID <- as.character(fam$sample.ID)
   
@@ -45,7 +54,7 @@ create_keep_file <- function(
     select(family.ID, sample.ID)
   
   if (nrow(keep_df) == 0) {
-    stop("No matching samples between metadata subset and FAM file.")
+    stop("No matching samples between metadata subset and FAM file")
   }
   
   dir.create(dirname(output_file), recursive = TRUE, showWarnings = FALSE)
@@ -59,7 +68,7 @@ create_keep_file <- function(
 }
 
 # plink_filter(input, output, plink, keep, geno_na, maf, ind_na)
-# Performs genotype quality control using PLINK.
+# Performs genotype quality control using PLINK
 # input = PLINK input prefix (without .bed/.bim/.fam)
 # output = Output prefix for filtered PLINK files
 # plink = Path to PLINK executable
@@ -105,7 +114,8 @@ plink_filter <- function(
     }
     args <- c(
       args,
-      "--keep", keep)
+      "--keep", keep
+      )
   }
   
   args <- c(
@@ -229,9 +239,9 @@ filter_metadata <- function(
   # Import metadata
   metadata <- read.csv(metadata_file)
   
-  # Import filtered PLINK fam file
+  # Import filtered .fam file
   fam <- read.table(fam_file, header = FALSE)
-  
+  # Set column names
   colnames(fam) <- c(
     "family.ID",
     "sample.ID",
@@ -259,7 +269,7 @@ filter_metadata <- function(
     match(fam$sample.ID, metadata_filtered[[sample_col]]),
   ]
   
-  # Checking all samples match
+  # Check all samples match
   if (any(is.na(metadata_filtered[[sample_col]]))) {
     stop("Some samples in the filtered fam file were not found in metadata.")
   }
@@ -307,6 +317,7 @@ plink_extract_markers <- function(
   
   dir.create(dirname(output), recursive = TRUE, showWarnings = FALSE)
   
+  # Define arguments
   args <- c(
     "--bfile", input,
     "--allow-extra-chr",
@@ -315,6 +326,7 @@ plink_extract_markers <- function(
     "--out", output
   )
   
+  # Run PLINK
   run_plink(plink = plink, args = args)
   
   message("Marker-filtered PLINK files saved to: ", output)
@@ -340,6 +352,7 @@ plink_to_bigSNP <- function(
   rds_file <- sub("\\.bed$", ".rds", bed_file)
   bk_file  <- sub("\\.bed$", ".bk", bed_file)
   
+  # if overwrite = TRUE, remove existing bigSNP .rds / .bk files
   if (overwrite) {
     if (file.exists(rds_file)) {
       file.remove(rds_file)
@@ -349,7 +362,9 @@ plink_to_bigSNP <- function(
     }
   }
   
+  # if files do not exist
   if (!file.exists(rds_file) || !file.exists(bk_file)) {
+    # Read PLINK into bigSNP files
     snp_readBed(bed_file)
   }
   
@@ -367,17 +382,20 @@ bigSNP_to_nummat <- function(
     obj
 ) {
   
+  # Separate bigSNP objects
   G <- obj$genotypes
   map <- obj$map
   fam <- obj$fam
   
+  # Genotype data as matrix
   G_matrix <- as.matrix(G[])
-  
   rownames(G_matrix) <- fam$sample.ID
   colnames(G_matrix) <- map$marker.ID
   
   return(G_matrix)
 }
+
+
 
 # plink_to_nummat(plink_prefix, output_file, overwrite_bigSNP, save_obj)
 # Wrapper function that converts PLINK files to bigSNP object to numeric genotype matrix
@@ -416,7 +434,9 @@ plink_to_nummat <- function(
     prefix = plink_prefix
   )
   
+  # if save_obj = TRUE
   if (save_obj) {
+    # Save object to results
     result$obj <- obj
   }
   
@@ -425,7 +445,6 @@ plink_to_nummat <- function(
     saveRDS(result, output_file)
     message("Numeric matrix object saved to: ", output_file)
   }
-  
   
   message("Samples: ", nrow(G_matrix))
   message("Markers: ", ncol(G_matrix))
@@ -438,11 +457,14 @@ plink_to_nummat <- function(
 # prefix = PLINK file prefix
 # Returns: data frame of samples and SNPs
 count_plink_dataset <- function(prefix) {
+  
+  # Import .fam and .bim
   fam <- read.table(paste0(prefix, ".fam"), header = FALSE, stringsAsFactors = FALSE)
   bim <- read.table(paste0(prefix, ".bim"), header = FALSE, stringsAsFactors = FALSE)
   
+  # Create data frame
   data.frame(
-    Samples = nrow(fam),
-    SNPs = nrow(bim)
+    samples = nrow(fam),
+    snps = nrow(bim)
   )
 }

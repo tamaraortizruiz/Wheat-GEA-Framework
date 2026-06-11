@@ -18,6 +18,7 @@ run_pca_bigsnpr <- function(
     ncores = 1
 ) {
   
+  # Separate bigSNP object
   G <- obj$genotypes
   fam <- obj$fam
   map <- obj$map
@@ -31,7 +32,7 @@ run_pca_bigsnpr <- function(
                        fun.scaling = snp_scaleBinom(),
                        ncores = ncores)
   
-  # Save scores
+  # Save PC scores
   scores <- as.data.frame(pca$u)
   colnames(scores) <- paste0("PC", seq_len(ncol(scores)))
   scores$sample.ID <- fam$sample.ID
@@ -141,60 +142,110 @@ plot_pca <- function(
   return(p)
 }
 
-# calculate_kinship(geno, method, save, output_file, overwrite)
-# Calculates a genetic kinship matrix from genotype data
-# geno = Numeric genotype matrix, samples as rows and markers as columns
-# method = Kinship method used by statgenGWAS::kinship()
-# save = Whether to save the kinship matrix as .csv
-# output_file = Path to save or load kinship matrix
-# overwrite = If FALSE, reuse existing kinship file.
-# Output: Kinship matrix
-# Returns: Matrix of pairwise genetic relatedness among samples
-calculate_kinship <- function(
-    geno,
-    method = "vanRaden",
-    save = FALSE,
-    output_file = NULL,
+# run_gemma_kinship()
+# Calculates a kinship matrix using GEMMA directly from PLINK genotype files
+# Resulting kinship matrix is saved in GEMMA's native .cXX.txt format
+# gemma = Path to the GEMMA executable
+# Default = "gemma" assumes GEMMA is available in the system PATH
+# bfile = PLINK binary file prefix (.bed/.bim/.fam)
+# output_prefix = Prefix assigned to GEMMA output files
+# output_dir = Directory to write GEMMA output files
+# overwrite = If FALSE, reuse existing kinship file
+# Output: GEMMA kinship matrix in centered relatedness format .cXX.txt
+# Returns: Output prefix of generated kinship matrix file
+run_gemma_kinship <- function(
+    gemma = "gemma",
+    bfile,
+    output_prefix = "gemma_kinship",
+    output_dir = "Output/GEA/GEMMA",
     overwrite = FALSE
 ) {
   
-  # Overwrite existing kinship according to overwrite argument
-  if (!is.null(output_file) && file.exists(output_file) && !overwrite) {
-    message("Loading existing kinship matrix")
-    return(as.matrix(read.csv(
-      output_file,
-      row.names = 1,
-      check.names = FALSE
-    )))
+  # Create output file name
+  kinship_file <- file.path(output_dir, paste0(output_prefix, ".cXX.txt"))
+  
+  # if there already is a GEMMA kinship file and overwrite = FALSE
+  if (file.exists(kinship_file) && !overwrite) {
+    message("Reusing existing GEMMA kinship file: ", kinship_file)
+    return(kinship_file)
   }
   
-  # Check input
-  if (!is.matrix(geno)) {
-    geno <- as.matrix(geno)
+  # Create output
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  
+  # Create dummy pheno file to include samples
+  fam <- read.table(paste0(bfile, ".fam"), stringsAsFactors = FALSE)
+  dummy_pheno <- rep(1, nrow(fam))
+  dummy_pheno_file <- file.path(output_dir, "dummy_pheno.txt")
+  write.table(dummy_pheno, dummy_pheno_file, quote = FALSE, row.names = FALSE, col.names = FALSE)
+  
+  # Define GEMMA arguments
+  args <- c(
+    "-bfile", bfile,
+    "-p", dummy_pheno_file,
+    "-gk", "1",
+    "-o", output_prefix,
+    "-outdir", output_dir
+  )
+  
+  message("\nRunning GEMMA kinship:")
+  message(gemma, " ", paste(args, collapse = " "))
+  
+  # Run GEMMA command from R using system2()
+  status <- system2(gemma, args = args)
+  
+  if (status != 0) {
+    stop("GEMMA kinship calculation failed. Check GEMMA log files.")
   }
   
-  # Mean imputation per SNP
-  SNPmeans <- colMeans(geno, na.rm = TRUE)
-  
-  geno_imputed <- geno
-  
-  idx <- which(is.na(geno_imputed), arr.ind = TRUE)
-  geno_imputed[idx] <- SNPmeans[idx[, 2]]
-  
-  # Calculate kinship
-  kinshipMat <- kinship(geno_imputed, method = method)
-  
-  # Add sample names
-  if (!is.null(rownames(geno))) {
-    rownames(kinshipMat) <- rownames(geno)
-    colnames(kinshipMat) <- rownames(geno)
+  if (!file.exists(kinship_file)) {
+    stop("Expected GEMMA kinship file not found: ", kinship_file)
   }
   
-  # if save, write to output file
-  if (save) {
-    write.csv(kinshipMat, file = output_file)
-    message("Kinship matrix saved to: ", output_file)
-  }
+  message("GEMMA kinship saved to: ", kinship_file)
   
-  return(kinshipMat)
+  return(kinship_file)
+}
+
+# summarize_gemma_kinship(kinship_file)
+# Summarizes GEMMA kinship matrix results
+# kinship_file = File path for GEMMA kinship matrix
+# Output: A data frame with diagonal and off-diagonal kinship statistics
+# Returns: Summary statistics data frame
+summarize_gemma_kinship <- function(kinship_file) {
+  
+  # Read kinship matrix
+  K <- as.matrix(read.table(kinship_file, header = FALSE))
+  
+  # Extract diagonal and off-diagonal values
+  diag_values <- diag(K)
+  off_diag_values <- K[upper.tri(K)]
+  
+  # Extract statistics
+  stats <- data.frame(
+    metric = c(
+      "n_samples",
+      "diag_min",
+      "diag_mean",
+      "diag_median",
+      "diag_max",
+      "offdiag_min",
+      "offdiag_mean",
+      "offdiag_median",
+      "offdiag_max"
+    ),
+    value = c(
+      nrow(K),
+      min(diag_values, na.rm = TRUE),
+      mean(diag_values, na.rm = TRUE),
+      median(diag_values, na.rm = TRUE),
+      max(diag_values, na.rm = TRUE),
+      min(off_diag_values, na.rm = TRUE),
+      mean(off_diag_values, na.rm = TRUE),
+      median(off_diag_values, na.rm = TRUE),
+      max(off_diag_values, na.rm = TRUE)
+    )
+  )
+  
+  return(stats)
 }

@@ -1,5 +1,4 @@
-# ---- Climate Variables ----
-
+# ---- Environmental variables ----
 # extract_climate_variables(metadata, lon_col, lat_col, sample_col, var, res,
 #                           climate_dir, output_file, overwrite)
 # Extracts WorldClim climate variables for each sample using its longitude and latitude
@@ -74,7 +73,7 @@ extract_climate_variables <- function(
   )
   
   # Extract climatic variables
-  climate_df <- terra::extract(clim_rasters, points)
+  climate_df <- extract(clim_rasters, points)
   message("Climate data extracted for ", nrow(climate_df), " samples.")
   
   # Remove terra's internal ID column
@@ -88,8 +87,9 @@ extract_climate_variables <- function(
   
   # Write data frame of climate variables
   write.csv(climate_df, output_file, row.names = FALSE)
+
   message("\nClimate extraction summary\n",
-          "Samples in genotype dataset: ", n_before, "\n",
+          "Samples in original dataset: ", n_before, "\n",
           "Samples with coordinate data: ", n_after, "\n",
           "BIO variables extracted: ", ncol(climate_df) - 1, "\n",
           "Samples with climate data: ", nrow(climate_df))
@@ -120,9 +120,11 @@ plot_climate_map <- function(
   
   world <- ne_countries(scale = "medium", returnclass = "sf")
   
+  # Extract plot data
   plot_data <- climate_data %>%
     left_join(metadata[, c(sample_col, lon_col, lat_col)], by = sample_col)
   
+  # Plot
   p <- ggplot() +
     geom_sf(data = world, fill = "gray95", color = "gray70", linewidth = 0.2) +
     geom_point(data = plot_data,
@@ -255,6 +257,7 @@ plot_climate_pca <- function(
     pc_x = 1,
     pc_y = 2
 ) {
+
   # Extract scores and variance
   scores <- climate_pca_result$scores
   variance <- climate_pca_result$variance

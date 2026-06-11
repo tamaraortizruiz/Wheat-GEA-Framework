@@ -8,30 +8,28 @@ This project implements a modular workflow for identifying genomic variants asso
 
 ## Pipeline Overview
 
-1.  Quality control of genotype data using PLINK
+1.  Environmental data extraction and processing
 
-2.  Climate variable extraction from WorldClim
+2.  Genotype quality control
 
-3.  Environmental filtering
+3.  Population structure analysis
 
-4.  Population structure analysis using PCA
+4.  Kinship analysis
 
-5.  Kinship matrix calculation using GEMMA
-
-6.  Genome–environment association analysis
+5.  Genome-environment association analysis
 
     - LMM (GEMMA)
     - LFMM
     - RDA
     - pcadapt
 
-7.  Evaluation and comparison of structure correction strategies
+6.  Evaluation and comparison of structure correction strategies
 
-8.  Consensus SNP identification
+7.  Consensus SNP set construction
 
-9.  Robustness-based consensus selection
+8.  Robustness-based consensus selection
 
-10. Accession-level adaptive germplasm scoring
+9.  Accession-level adaptive germplasm scoring
 
 ## Project Structure
 
@@ -62,8 +60,8 @@ This file contains:
 
 - Input and output paths
 - Command line tool paths
-- Quality control thresholds
 - Climate extraction settings
+- Quality control thresholds
 - Population structure parameters
 - LMM, LFMM, RDA, and pcadapt settings
 - Consensus analysis options

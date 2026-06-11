@@ -1,4 +1,5 @@
-#---- Setup ----
+# ---- Setup ----
+
 # create_project_dirs()
 # Creates the pipeline's folder structure
 # overwrite = If TRUE, removes and remakes existing folders
@@ -12,6 +13,8 @@ create_project_dirs <- function(overwrite = FALSE) {
     "Output/GEA",
     "Output/GEA/GEMMA",
     "Output/GEA/LFMM",
+    "Output/GEA/RDA",
+    "Output/GEA/pcadapt",
     "Output/Plots",
     "Logs"
   )

@@ -2,68 +2,76 @@ project:
   name: wheat_GEA_pipeline
   
 run:
+  # if TRUE, deletes all existing files and reruns the pipeline from scratch
   overwrite: false
 
 plink:
   path: "/Users/tamaraortiz/plink_mac_20250819/plink"
 
+# Defines input genotype files
 genotype:
   input_prefix: "RawData/Wheat_all"
   input_fam: "RawData/Wheat_all.fam"
 
+# Defines input metadata files and characteristics
 metadata:
-  file: "RawData/metadata_BW.csv"
+  file: "RawData/passportinfo 1.csv"
   sample_col: "SeedID"
   population_col: "PopulationType"
   country_col: "Country"
   filtered_file: "Data/filtered_metadata.rds"
-  
+
 subsetting:
-  use_keep: true
+  # if TRUE, subsets genotype data by samples
+  use: true
   sample_metadata: "RawData/sample_metadata.csv"
   keep_file: "Data/sample_keep.txt"
 
 marker_subsetting:
+  # if TRUE, subsets genotype data by markers
   use_extract: true
   extract_file: "RawData/sample_snps.txt"
   output_prefix: "Data/Wheat_all_qc_marker_sample"
 
-outputs:
-  qc_prefix: "Data/Wheat_all_qc"
-  qc_bed: "Data/Wheat_all_qc.bed"
-  qc_fam: "Data/Wheat_all_qc.fam"
-  climate_prefix: "Data/Wheat_all_qc_climate"
-  ld_prefix: "Data/Wheat_all_qc_ldpruned"
-  qc_numeric_matrix: "Data/Wheat_all_qc_climate_numeric_matrix.rds"
-  ld_numeric_matrix: "Data/Wheat_all_ld_climate_numeric_matrix.rds"
-
+# Defines which modules to run
 analysis:
+  run_env: true
   run_qc: true
-  run_climate: true
   run_ld_pruning: true
   run_pca: true
+  run_kinship: true
   run_lmm: true
   run_lfmm: true
-
-qc:
-  geno_na: 0.10
-  maf: 0.01
-  ind_na: 0.10
-  
-climate:
+  run_rda: true
+  run_pcadapt: true
+ 
+# ----- Module specific configuration ----- 
+env:
   var: "bio"
   res: 5
   path: "Data/Climate"
   output_file: "Data/climate_variables.csv"
   lon_col: "Longitude"
   lat_col: "Latitude"
-  keep_file: "Data/climate_keep.txt"
   vars: ["BIO4"]
+  
+qc:
+  geno_na: 0.05
+  maf: 0.01
+  ind_na: 0.10
 
 ld_pruning:
   window: 50
   step: 10
   r2: 0.2
+  
+qc_outputs:
+  qc_prefix: "Data/Wheat_all_qc"
+  qc_bed: "Data/Wheat_all_qc.bed"
+  qc_fam: "Data/Wheat_all_qc.fam"
+  ld_prefix: "Data/Wheat_all_qc_ldpruned"
+  qc_numeric_matrix: "Data/Wheat_all_qc_climate_numeric_matrix.rds"
+  ld_numeric_matrix: "Data/Wheat_all_ld_climate_numeric_matrix.rds"
 
 pca:
   n_pcs: 10
@@ -76,14 +84,23 @@ gemma:
   output_dir: "Output/GEA/GEMMA"
   output_prefix: "LMM"
   pc_strategies: [0, 3, 5]
+  q_threshold: 0.05
   kinship_prefix: "wheat_kinship"
   phenotype_file: "Data/GEMMA/pheno.txt"
   covariates_file: "Output/Structure/pca_covariates_gemma.txt"
   
 lfmm:
-  K_values: [2, 3, 4, 5]
   output_dir: "Output/GEA/LFMM"
+  K_values: [2, 3, 4, 5]
   genomic_control: true
   q_threshold: 0.05
   
-  
+rda:
+  output_dir: "Output/GEA/RDA"
+  pc_strategies: [0, 3, 5]
+  q_threshold: 0.05
+
+pcadapt:
+  output_dir: "Output/GEA/pcadapt"
+  K_values: [2, 3, 4, 5]
+  q_threshold: 0.05
