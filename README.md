@@ -1,6 +1,6 @@
 # Wheat GEA Framework
 
-A reproducible pipeline for genome–environment association (GEA) analysis and adaptive germplasm prioritization in wheat.
+A reproducible pipeline for genome-environment association (GEA) analysis and adaptive germplasm prioritization in wheat.
 
 ## Overview
 
@@ -48,7 +48,7 @@ The following files should be placed in `RawData/` before running the pipeline:
 - Passport metadata containing sample identifiers and geographic coordinates (longitude and latitude)
 - Optional sample subsets or marker subsets
 
-These input file paths should be updated in the pipeline configuration file. 
+These input file paths should be updated in the pipeline configuration file.
 
 ## Configuration
 
@@ -69,7 +69,6 @@ This file contains:
 - Consensus analysis options
 
 All configuration settings can be modified if needed; however, settings required by the current pipeline structure are annotated with `# DNC` (“Do Not Change”). In most cases, users should only modify settings that are not marked with `# DNC`, unless they are also updating the corresponding project file structure, column names, or pipeline code.
-
 
 ## Current Status
 
