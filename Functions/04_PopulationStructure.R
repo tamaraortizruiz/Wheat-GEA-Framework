@@ -1,6 +1,6 @@
 # ---- Population Structure ----
 
-# run_pca_bigsnpr(obj, n_pcs, output_file, covariates_file, ncores)
+# run_pca_bigsnpr()
 # Runs PCA on genotype data using bigsnpr
 # obj = bigSNP object
 # n_pcs = Number of principal components to calculate
@@ -18,12 +18,11 @@ run_pca_bigsnpr <- function(
     ncores = 1
 ) {
   
-  # Separate bigSNP object
   G <- obj$genotypes
   fam <- obj$fam
   map <- obj$map
   
-  # Impute missing genotypes in bigsnpr format
+  # Impute missing genotypes
   G_imp <- snp_fastImputeSimple(G, method = "mean2", ncores = ncores)
   
   # PCA using bigsnpr
@@ -32,12 +31,12 @@ run_pca_bigsnpr <- function(
                        fun.scaling = snp_scaleBinom(),
                        ncores = ncores)
   
-  # Save PC scores
+  # PC scores
   scores <- as.data.frame(pca$u)
   colnames(scores) <- paste0("PC", seq_len(ncol(scores)))
   scores$sample.ID <- fam$sample.ID
   
-  # Save explained variances per each PC
+  # Variances
   variance_df <- data.frame(
     PC = paste0("PC", seq_along(pca$d)),
     Eigenvalue = pca$d^2,
@@ -45,10 +44,9 @@ run_pca_bigsnpr <- function(
     CumulativeVariance = cumsum((pca$d^2 / sum(pca$d^2)) * 100)
   )
   
-  # Extract covariates
+  # Covariates
   covariates <- scores[, c("sample.ID", paste0("PC", seq_len(n_pcs))), drop = FALSE]
   
-  # Save results
   result <- list(
     pca = pca,
     scores = scores,
@@ -75,7 +73,7 @@ run_pca_bigsnpr <- function(
   return(result)
 }
 
-# plot_pca(pca_result, metadata, sample_col, color_col, pc_x, pc_y)
+# plot_pca()
 # Plots selected principal components from PCA result
 # pca_result = Output from run_pca_bigsnpr()
 # metadata = Optional metadata data frame to merge with PCA scores for plotting
@@ -94,25 +92,18 @@ plot_pca <- function(
     pc_y = 2
 ) {
   
-  # Extract scores and variance
   scores <- pca_result$scores
   variance <- pca_result$variance
   
-  # Select PCs for each axis
   x_col <- paste0("PC", pc_x)
   y_col <- paste0("PC", pc_y)
   
   if (!is.null(metadata)) {
-    # Extract individuals
     metadata[[sample_col]] <- as.character(metadata[[sample_col]])
     scores$sample.ID <- as.character(scores$sample.ID)
-    
-    # Join individuals to scores
-    scores <- left_join(scores, metadata,
-                        by = setNames(sample_col, "sample.ID"))
+    scores <- left_join(scores, metadata, by = setNames(sample_col, "sample.ID"))
   }
   
-  # Add variances to axis labels
   x_lab <- paste0(x_col, " (", round(variance$Variance[pc_x], 2), "%)")
   y_lab <- paste0(y_col, " (", round(variance$Variance[pc_y], 2), "%)")
   
@@ -138,7 +129,6 @@ plot_pca <- function(
       theme_classic()
   }
   
-  # Return plot
   return(p)
 }
 
@@ -161,7 +151,6 @@ run_gemma_kinship <- function(
     overwrite = FALSE
 ) {
   
-  # Create output file name
   kinship_file <- file.path(output_dir, paste0(output_prefix, ".cXX.txt"))
   
   # if there already is a GEMMA kinship file and overwrite = FALSE
@@ -170,16 +159,14 @@ run_gemma_kinship <- function(
     return(kinship_file)
   }
   
-  # Create output
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   
-  # Create dummy pheno file to include samples
   fam <- read.table(paste0(bfile, ".fam"), stringsAsFactors = FALSE)
   dummy_pheno <- rep(1, nrow(fam))
   dummy_pheno_file <- file.path(output_dir, "dummy_pheno.txt")
   write.table(dummy_pheno, dummy_pheno_file, quote = FALSE, row.names = FALSE, col.names = FALSE)
   
-  # Define GEMMA arguments
+  # GEMMA arguments
   args <- c(
     "-bfile", bfile,
     "-p", dummy_pheno_file,
@@ -207,21 +194,18 @@ run_gemma_kinship <- function(
   return(kinship_file)
 }
 
-# summarize_gemma_kinship(kinship_file)
+# summarize_gemma_kinship()
 # Summarizes GEMMA kinship matrix results
 # kinship_file = File path for GEMMA kinship matrix
 # Output: A data frame with diagonal and off-diagonal kinship statistics
 # Returns: Summary statistics data frame
 summarize_gemma_kinship <- function(kinship_file) {
   
-  # Read kinship matrix
   K <- as.matrix(read.table(kinship_file, header = FALSE))
   
-  # Extract diagonal and off-diagonal values
   diag_values <- diag(K)
   off_diag_values <- K[upper.tri(K)]
   
-  # Extract statistics
   stats <- data.frame(
     metric = c(
       "n_samples",

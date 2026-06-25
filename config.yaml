@@ -2,37 +2,11 @@ project:
   name: wheat_GEA_pipeline
   
 run:
-  # if TRUE, deletes all existing files and reruns the pipeline from scratch
-  overwrite: false
+  overwrite: false # if TRUE, deletes all existing files and reruns the pipeline from scratch
 
 plink:
-  path: "/Users/tamaraortiz/plink_mac_20250819/plink"
-
-# Defines input genotype files
-genotype:
-  input_prefix: "RawData/Wheat_all"
-  input_fam: "RawData/Wheat_all.fam"
-
-# Defines input metadata files and characteristics
-metadata:
-  file: "RawData/passportinfo 1.csv"
-  sample_col: "SeedID"
-  population_col: "PopulationType"
-  country_col: "Country"
-  filtered_file: "Data/filtered_metadata.rds"
-
-subsetting:
-  # if TRUE, subsets genotype data by samples
-  use: true
-  sample_metadata: "RawData/sample_metadata.csv"
-  keep_file: "Data/sample_keep.txt"
-
-marker_subsetting:
-  # if TRUE, subsets genotype data by markers
-  use_extract: true
-  extract_file: "RawData/sample_snps.txt"
-  output_prefix: "Data/Wheat_all_qc_marker_sample"
-
+  path: "/Users/tamaraortiz/plink_mac_20250819/plink" # Local PLINK path
+  
 # Defines which modules to run
 analysis:
   run_env: true
@@ -44,28 +18,58 @@ analysis:
   run_lfmm: true
   run_rda: true
   run_pcadapt: true
+  run_consensus: true
+  run_consensus_ld: true
+  run_consensus_robustness: true
+
+# User defined input genotype files
+genotype:
+  input_prefix: "RawData/Wheat_all"
+  input_fam: "RawData/Wheat_all.fam"
+
+# User defined input metadata files and characteristics
+metadata:
+  file: "RawData/passportinfo 1.csv"
+  sample_col: "SeedID" # Column containing sample IDs to match with genotype data
+  subpopulation: "PopulationType" # Column containing sample characteristic (e.g. Population, Country) to color plots by
+  filtered_file: "Data/filtered_metadata.rds" #DNC
+
+# User defined 
+subsetting:
+  use: true # if TRUE, subsets genotype data by samples
+  sample_metadata: "RawData/sample_metadata.csv" # Metadata for selected samples
+  keep_file: "Data/sample_keep.txt" #DNC
+
+marker_subsetting:
+  use_extract: false # if TRUE, subsets genotype data by markers
+  extract_file: "RawData/sample_snps.txt" # Text file for selected samples
+  output_prefix: "Data/Wheat_all_qc_marker_sample" #DNC
  
-# ----- Module specific configuration ----- 
+# Module specific configuration
+# Environmental data processing
 env:
-  var: "bio"
-  res: 5
-  path: "Data/Climate"
-  output_file: "Data/climate_variables.csv"
-  lon_col: "Longitude"
-  lat_col: "Latitude"
-  vars: ["BIO4"]
-  
+  var: "bio" #DNC
+  res: 5 #DNC
+  path: "Data/Climate" #DNC
+  output_file: "Data/climate_variables.csv" #DNC
+  lon_col: "Longitude" # Column containing longitude data in metadata
+  lat_col: "Latitude" # Column containing latitude data in metadata
+  vars: ["BIO1","BIO3","BIO4"] #BIO1 to BIO19
+ 
+# Genotype quality control 
 qc:
   geno_na: 0.05
   maf: 0.01
   ind_na: 0.10
 
+# LD pruning for PCA
 ld_pruning:
   window: 50
   step: 10
   r2: 0.2
   
-qc_outputs:
+# Quality control path outputs
+qc_outputs: #DNC
   qc_prefix: "Data/Wheat_all_qc"
   qc_bed: "Data/Wheat_all_qc.bed"
   qc_fam: "Data/Wheat_all_qc.fam"
@@ -73,34 +77,56 @@ qc_outputs:
   qc_numeric_matrix: "Data/Wheat_all_qc_climate_numeric_matrix.rds"
   ld_numeric_matrix: "Data/Wheat_all_ld_climate_numeric_matrix.rds"
 
+# PCA
 pca:
   n_pcs: 10
   ncores: 1
-  output_file: "Output/Structure/pca_ldpruned.rds"
-  covariates_file: "Output/Structure/pca_covariates.csv"
+  output_file: "Output/Structure/pca_ldpruned.rds" #DNC
+  covariates_file: "Output/Structure/pca_covariates.csv" #DNC
 
+# LMM (GEMMA)
 gemma:
-  path: "/opt/anaconda3/envs/gemma_x86/bin/gemma"
-  output_dir: "Output/GEA/GEMMA"
-  output_prefix: "LMM"
-  pc_strategies: [0, 3, 5]
-  q_threshold: 0.05
-  kinship_prefix: "wheat_kinship"
-  phenotype_file: "Data/GEMMA/pheno.txt"
-  covariates_file: "Output/Structure/pca_covariates_gemma.txt"
-  
-lfmm:
-  output_dir: "Output/GEA/LFMM"
-  K_values: [2, 3, 4, 5]
-  genomic_control: true
-  q_threshold: 0.05
-  
-rda:
-  output_dir: "Output/GEA/RDA"
-  pc_strategies: [0, 3, 5]
-  q_threshold: 0.05
+  path: "/opt/anaconda3/envs/gemma_x86/bin/gemma" # Local GEMMA path
+  output_dir: "Output/GEA/GEMMA" #DNC
+  pc_strategies: [0, 3, 5] # Number of PCs to retain for structure correction
+  q_threshold: 0.05 # q-value significance threshold
+  kinship_prefix: "kinship" #DNC
+  phenotype_file: "Data/GEMMA/pheno.txt" #DNC
+  covariates_file: "Output/Structure/pca_covariates_gemma.txt" #DNC
 
+# LFMM
+lfmm:
+  output_dir: "Output/GEA/LFMM" #DNC
+  K_values: [2, 3, 4, 5] # Number of K latent factors for structure correction
+  genomic_control: true
+  q_threshold: 0.05 # q-value significance threshold
+
+# RDA
+rda:
+  output_dir: "Output/GEA/RDA" #DNC
+  pc_strategies: [0, 3, 5] # Number of PCs for structure correction
+  q_threshold: 0.05 # q-value significance threshold
+
+# pcadapt
 pcadapt:
-  output_dir: "Output/GEA/pcadapt"
-  K_values: [2, 3, 4, 5]
-  q_threshold: 0.05
+  output_dir: "Output/GEA/pcadapt" #DNC
+  K_values: [2, 3, 4, 5] # Number of K values for structure correction
+  q_threshold: 0.05 # q-value significance threshold
+
+# Consensus set construction
+consensus:
+  output_dir: "Output/ConsensusSNP" #DNC
+  q_threshold: 0.05 # q-value significance threshold
+  
+# LD pruning and blocking
+ld_pruning_ph:
+  bfile: "Data/Wheat_all_qc" #DNC
+  output_dir: "Output/ConsensusLD" #DNC
+  r2_threshold: 0.2
+  ld_window_kb: 10000
+  ld_window: 99999
+  allow_extra_chr: true
+
+# Consensus set robustness evaluation
+consensus_robustness:
+  output_dir: "Output/ConsensusRobustness" #DNC

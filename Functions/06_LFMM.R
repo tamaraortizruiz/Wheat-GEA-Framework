@@ -5,21 +5,18 @@
 # Output: Imputed genotype matrix
 # Returns: Imputed genotype matrix
 impute_geno_mean <- function(geno) {
-  # As matrix
+  
   G <- as.matrix(geno[])
-  # Calculate snp means
   snp_means <- colMeans(G, na.rm = TRUE)
   
-  # Replaces any NA by SNP mean
   for (j in seq_len(ncol(G))) {
     missing <- is.na(G[, j])
     if (any(missing)) {
       G[missing, j] <- snp_means[j]
     }
   }
-
-  # Return imputes matrix
-  G
+  
+  return(G)
 }
 
 # prepare_lfmm_inputs()
@@ -41,29 +38,24 @@ prepare_lfmm_inputs <- function(
     sample_col = "SeedID"
 ) {
   
-  # Convert sample IDs to characters for matching
   fam$sample.ID <- as.character(fam$sample.ID)
   climate_data[[sample_col]] <- as.character(climate_data[[sample_col]])
-  # Reorder to match climate data
   climate_ordered <- climate_data[match(fam$sample.ID, climate_data[[sample_col]]),]
   
-  # Ensure all samples are in climate data
+  # Missing samples check
   if (any(is.na(climate_ordered[[sample_col]]))) {
     stop("Some FAM samples are missing from climate_data")
   }
   
-  # Select climatic variable
   env <- climate_ordered[[phenotype]]
-  # Remove NAs
   keep <- !is.na(env)
-  # Filter
   geno_lfmm <- geno[keep, , drop = FALSE]
   fam_lfmm <- fam[keep, , drop = FALSE]
   env_lfmm <- scale(as.matrix(env[keep]))
   
   colnames(env_lfmm) <- phenotype
   
-  # Impute missing values
+  # Impute NAs
   geno_lfmm <- impute_geno_mean(geno_lfmm)
   
   # Remove SNPs with 0 variance
@@ -72,11 +64,9 @@ prepare_lfmm_inputs <- function(
   
   message("Removing ", sum(!keep_snps), " zero-variance SNPs before LFMM.")
   
-  # Filter
   geno_lfmm <- geno_lfmm[, keep_snps, drop = FALSE]
   map_lfmm <- map[keep_snps, , drop = FALSE]
   
-  # Aligned genotype matrix, environmental matrix, marker map, fam table and climate data
   list(
     geno = geno_lfmm,
     env = env_lfmm,
@@ -115,7 +105,6 @@ run_lfmm_single <- function(
   
   message("\nRunning LFMM2: ", phenotype, " | K = ", K)
   
-  # Fit LFMM model with K latent factors
   mod <- lfmm2(
     input = geno,
     env = env,
@@ -131,11 +120,9 @@ run_lfmm_single <- function(
     linear = TRUE
   )
   
-  # Extract p values and z scores
   p_values <- as.numeric(test$pvalues[, 1])
   z_scores <- as.numeric(test$zscores[, 1])
   
-  # Construct structured results table
   result <- map %>%
     mutate(
       method = "LFMM",
@@ -153,7 +140,7 @@ run_lfmm_single <- function(
   # Genomic inflation factor
   lambda_gc <- median(qchisq(1 - result$p_value, df = 1), na.rm = TRUE) / qchisq(0.5, df = 1)
   
-  # Construct evaluation data frame
+  # Evaluation data frame
   evaluation <- data.frame(
     method = "LFMM",
     phenotype = phenotype,
@@ -162,12 +149,12 @@ run_lfmm_single <- function(
     n_snps = nrow(result),
     lambda_gc = lambda_gc,
     min_p = min(result$p_value, na.rm = TRUE),
+    min_q = min(result$q_value, na.rm = TRUE),
     n_bonferroni = sum(result$bonferroni_significant, na.rm = TRUE),
     n_fdr = sum(result$fdr_significant, na.rm = TRUE),
     bonferroni_threshold = unique(result$bonferroni_threshold)
   )
   
-  # Write results
   write_csv(result, file.path(output_dir, paste0(output_prefix, "_results.csv")))
   write_csv(evaluation, file.path(output_dir, paste0(output_prefix, "_evaluation.csv")))
   
@@ -199,7 +186,6 @@ run_lfmm_strategies <- function(
     phenotype
 ) {
   
-  # Prepare the aligned genotype and environmental data
   lfmm_input <- prepare_lfmm_inputs(
     geno = geno,
     map = map,
@@ -213,15 +199,12 @@ run_lfmm_strategies <- function(
   all_eval <- list()
   all_models <- list()
   
-  # for each K in K values to evaluate
+  # for each K
   for (K in config$lfmm$K_values) {
-    # Name strategy
     strategy <- paste0("K", K)
-    
-    # Name output prefix
     output_prefix <- paste0(phenotype, "_", strategy)
     
-    # Run lfmm for K
+    # Run LFMM for K
     lfmm_run <- run_lfmm_single(
       geno = lfmm_input$geno,
       env = lfmm_input$env,
@@ -234,19 +217,14 @@ run_lfmm_strategies <- function(
       q_threshold = config$lfmm$q_threshold
     )
     
-    # Save results for K
     all_results[[strategy]] <- lfmm_run$results
     all_eval[[strategy]] <- lfmm_run$evaluation
     all_models[[strategy]] <- lfmm_run$model
   }
   
-  # Bind all results
   results_all <- bind_rows(all_results)
-  
-  # Bind all result evaluation
   evaluation_all <- bind_rows(all_eval)
   
-  # Best strategy
   best_strategy <- select_best_strategy(evaluation_all)$strategy[1]
   
   list(
@@ -259,7 +237,7 @@ run_lfmm_strategies <- function(
   )
 }
 
-# run_lfmm_all_variables(config, geno, map, fam, climate_data, phenotypes)
+# run_lfmm_all_variables()
 # Runs LFMM across selected environmental variables and population structure correction strategies
 # config = Configuration list loaded from YAML
 # geno = Genotype matrix or bigsnpr genotype object
@@ -268,8 +246,7 @@ run_lfmm_strategies <- function(
 # climate_data = Environmental data frame
 # phenotypes = Vector of environmental variables to analyze
 # Output: .csv files of all results, all evaluation results and best strategy per variable
-# Returns: List containing results by variable, combined results,
-#          combined evaluation and best_by_variable table
+# Returns: List containing results by variable, combined results, combined evaluation and best_by_variable table
 run_lfmm_all_variables <- function(
     config,
     geno,
@@ -281,14 +258,12 @@ run_lfmm_all_variables <- function(
   
   lfmm_all <- list()
   
-  # For each selected climatic variable
   for (phenotype in phenotypes) {
     
     message("\n==============================")
     message("Running LFMM for: ", phenotype)
     message("==============================")
     
-    # Run all correction strategies
     lfmm_all[[phenotype]] <- run_lfmm_strategies(
       config = config,
       geno = geno,
@@ -299,18 +274,14 @@ run_lfmm_all_variables <- function(
     )
   }
   
-  # Bind all results
   combined_results <- bind_rows(lapply(lfmm_all, function(x) x$results))
-  # Bind all results evaluation
   combined_evaluation <- bind_rows(lapply(lfmm_all, function(x) x$evaluation))
   
-  # Best strategy for each variable
   best_by_variable <- combined_evaluation %>%
     group_by(phenotype) %>%
     group_modify(~ select_best_strategy(.x)) %>%
     ungroup()
   
-  # Write results
   write_csv(combined_results, file.path(config$lfmm$output_dir, "lfmm_all_results.csv"))
   write_csv(combined_evaluation, file.path(config$lfmm$output_dir, "lfmm_all_evaluation.csv"))
   write_csv(best_by_variable, file.path(config$lfmm$output_dir, "lfmm_best_strategy_by_var.csv"))
@@ -323,7 +294,7 @@ run_lfmm_all_variables <- function(
   )
 }
 
-# plot_lfmm_qq(results, phenotype, p_col)
+# plot_lfmm_qq()
 # Creates a quantile-quantile (QQ) plot for all LFMM strategies
 # results = LFMM results table
 # phenotype = Environmental variable to plot
@@ -336,15 +307,12 @@ plot_lfmm_qq <- function(
     p_col = "p_value"
 ) {
   
-  # Filter plot data for phenotype and valid p-value
   plot_data <- results %>%
     filter(phenotype == !!phenotype,
            !is.na(.data[[p_col]]), .data[[p_col]] > 0, .data[[p_col]] <= 1)
   
-  # Create qq data frame grouped by strategy
   qq_df <- plot_data %>%
     group_by(strategy) %>%
-    # For each strategy, sorts p-values and creates expected vs observed values
     group_modify(~{
       pvals <- sort(.x[[p_col]])
       data.frame(
@@ -354,7 +322,6 @@ plot_lfmm_qq <- function(
     }) %>%
     ungroup()
   
-  # Plot
   ggplot(qq_df, aes(x = expected, y = observed)) +
     geom_point(alpha = 0.6) +
     geom_abline(
@@ -369,4 +336,23 @@ plot_lfmm_qq <- function(
       y = "Observed -log10(p)"
     ) +
     theme_classic()
+}
+
+# load_lfmm_results()
+# Helper function to load LFMM results from files
+load_lfmm_results <- function(config) {
+  
+  results_file <- file.path(config$lfmm$output_dir, "lfmm_all_results.csv")
+  evaluation_file <- file.path(config$lfmm$output_dir, "lfmm_all_evaluation.csv")
+  best_file <- file.path(config$lfmm$output_dir, "lfmm_best_strategy_by_var.csv")
+  
+  if (!all(file.exists(c(results_file, evaluation_file, best_file)))) {
+    stop("Saved LFMM result files not found.")
+  }
+  
+  list(
+    results = read.csv(results_file, check.names = FALSE),
+    evaluation = read.csv(evaluation_file, check.names = FALSE),
+    best_by_variable = read.csv(best_file, check.names = FALSE)
+  )
 }

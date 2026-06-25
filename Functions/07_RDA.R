@@ -1,4 +1,4 @@
-# prepare_rda_inputs(geno, map, fam, climate_data, phenotype, covariates_file, n_pcs, sample_col)
+# prepare_rda_inputs()
 # Prepares genotype, marker, sample, environmental, and PCA covariate data for RDA analysis
 # geno = Genotype matrix with samples as rows and SNPs as columns
 # map = Marker map corresponding to genotype columns
@@ -22,47 +22,38 @@ prepare_rda_inputs <- function(
     sample_col = "SeedID"
 ) {
   
-  # Convert sample IDs to characters for matching
   fam$sample.ID <- as.character(fam$sample.ID)
   climate_data[[sample_col]] <- as.character(climate_data[[sample_col]])
-  # Reorder to match climate data
   climate_ordered <- climate_data[match(fam$sample.ID, climate_data[[sample_col]]), ]
   
-  # Ensure all samples are in climate data
   if (any(is.na(climate_ordered[[sample_col]]))) {
     stop("Some FAM samples are missing from climate_data.")
   }
   
-  # Select climatic variable
   env <- climate_ordered[[phenotype]]
-  # Remove NAs
   keep <- !is.na(env)
-  # Filter
   geno_rda <- geno[keep, , drop = FALSE]
   fam_rda <- fam[keep, , drop = FALSE]
+  
   # Scale environmental data
   env_rda <- data.frame(env = as.numeric(scale(env[keep])))
   
-  # Impute missing values
+  # Impute NAs
   geno_rda <- impute_geno_mean(geno_rda)
-  
   # Remove SNPs with 0 variance
   snp_var <- apply(geno_rda, 2, stats::var)
   keep_snps <- !is.na(snp_var) & snp_var > 0
   
   message("Removing ", sum(!keep_snps), " zero-variance SNPs before RDA.")
   
-  # Filter
   geno_rda <- geno_rda[, keep_snps, drop = FALSE]
   map_rda <- map[keep_snps, , drop = FALSE]
   
   covariates <- NULL
   
-  # if there is a covariates file
   if (!is.null(covariates_file) && n_pcs > 0) {
     pc_df <- read.csv(covariates_file, check.names = FALSE)
     pc_df$sample.ID <- as.character(pc_df$sample.ID)
-    # Order covariates
     pc_ordered <- pc_df[match(fam_rda$sample.ID, pc_df$sample.ID), ]
     
     if (any(is.na(pc_ordered$sample.ID))) {
@@ -83,8 +74,7 @@ prepare_rda_inputs <- function(
   )
 }
 
-# run_rda_single(geno, env, map, covariates, phenotype, strategy, output_prefix,
-# output_dir q_threshold)
+# run_rda_single()
 # Runs RDA model
 # geno = Prepared genotype matrix
 # env = Scaled environmental variable data frame
@@ -125,26 +115,24 @@ run_rda_single <- function(
     covariates <- as.data.frame(covariates)
     model_data <- cbind(env, covariates)
     condition_term <- paste(colnames(covariates), collapse = " + ")
-    # Define model formula including covariates
+    # Define model with covariates
     rda_formula <- as.formula(paste0("geno_scaled ~ env + Condition(", condition_term, ")"))
-    # Run model
     rda_model <- rda(rda_formula, data = model_data)
   }
   
-  # Extract SNP scores
+  # Scores
   snp_scores <- scores(
     rda_model,
     display = "species",
     choices = 1
   )
   
-  # Extract loadings
+  # Loadings
   rda_loading <- as.numeric(snp_scores[, 1])
-  # Calculate p-values and z-cores
+  
   z_scores <- as.numeric(scale(rda_loading))
   p_values <- 2 * pnorm(-abs(z_scores))
   
-  # Construct structured results table
   result <- map %>%
     mutate(
       method = "RDA",
@@ -164,7 +152,7 @@ run_rda_single <- function(
   # Genomic inflation factor
   lambda_gc <- median(qchisq(1 - result$p_value, df = 1), na.rm = TRUE) / qchisq(0.5, df = 1)
   
-  # Construct evaluation data frame
+  # Evaluation data frame
   evaluation <- data.frame(
     method = "RDA",
     phenotype = phenotype,
@@ -172,12 +160,12 @@ run_rda_single <- function(
     n_snps = nrow(result),
     lambda_gc = lambda_gc,
     min_p = min(result$p_value, na.rm = TRUE),
+    min_q = min(result$q_value, na.rm = TRUE),
     n_bonferroni = sum(result$bonferroni_significant, na.rm = TRUE),
     n_fdr = sum(result$fdr_significant, na.rm = TRUE),
     bonferroni_threshold = unique(result$bonferroni_threshold)
   )
   
-  # Write results
   write_csv(result, file.path(output_dir, paste0(output_prefix, "_results.csv")))
   write_csv(evaluation, file.path(output_dir, paste0(output_prefix, "_evaluation.csv")))
   
@@ -188,7 +176,7 @@ run_rda_single <- function(
   )
 }
 
-# run_rda_strategies(config, genom, map, fam, climate_data, phenotype)
+# run_rda_strategies()
 # Runs RDA across multiple population structure correction strategies
 # config = Configuration list loaded from YAML
 # geno = Genotype matrix
@@ -212,7 +200,7 @@ run_rda_strategies <- function(
   all_eval <- list()
   all_models <- list()
   
-  # For each structure correction strategy
+  # For each structure correction strategy (number of PCs)
   for (n_pcs in config$rda$pc_strategies) {
     
     if (n_pcs == 0) {
@@ -221,7 +209,6 @@ run_rda_strategies <- function(
       strategy <- paste0(n_pcs, "PCs")
     }
     
-    # Prepare RDA inputs
     rda_input <- prepare_rda_inputs(
       geno = geno,
       map = map,
@@ -233,7 +220,6 @@ run_rda_strategies <- function(
       sample_col = config$metadata$sample_col
     )
     
-    # Run RDA on strategy
     rda_run <- run_rda_single(
       geno = rda_input$geno,
       env = rda_input$env,
@@ -252,11 +238,8 @@ run_rda_strategies <- function(
   }
   
   results_all <- bind_rows(all_results)
-  
-  # Bind all result evaluation
   evaluation_all <- bind_rows(all_eval)
   
-  # Best strategy
   best_strategy <- select_best_strategy(evaluation_all)$strategy[1]
   
   list(
@@ -269,7 +252,7 @@ run_rda_strategies <- function(
   )
 }
 
-# run_rda_all_variables(geno, map, fam, climate_data, phenotypes)
+# run_rda_all_variables()
 # Runs RDA across selected environmental variables and population structure correction strategies
 # config = Configuration list loaded from YAML
 # geno = Genotype matrix
@@ -278,8 +261,7 @@ run_rda_strategies <- function(
 # climate_data = Environmental data frame
 # phenotypes = Character vector of climatic variables to analyze
 # Output: .csv files of all results, all evaluation results and best strategy per variable
-# Returns: List containing results by variable, combined results,
-#          combined evaluation and best_by_variable table
+# Returns: List containing results by variable, combined results, combined evaluation and best_by_variable table
 run_rda_all_variables <- function(
     config,
     geno,
@@ -291,7 +273,7 @@ run_rda_all_variables <- function(
   
   rda_all <- list()
   
-  # For each selected climatic variable
+  # For each climatic variable
   for (phenotype in phenotypes) {
     
     message("\n==============================")
@@ -309,18 +291,14 @@ run_rda_all_variables <- function(
     )
   }
   
-  # Bind all results
   combined_results <- bind_rows(lapply(rda_all, function(x) x$results))
-  # Bind all results evaluation
   combined_evaluation <- bind_rows(lapply(rda_all, function(x) x$evaluation))
   
-  # Best strategy for each variable
   best_by_variable <- combined_evaluation %>%
     group_by(phenotype) %>%
     group_modify(~ select_best_strategy(.x)) %>%
     ungroup()
   
-  # Write results
   write_csv(combined_results, file.path(config$rda$output_dir, "rda_all_results.csv"))
   write_csv(combined_evaluation, file.path(config$rda$output_dir, "rda_all_evaluation.csv"))
   write_csv(best_by_variable, file.path(config$rda$output_dir, "rda_best_strategy_by_var.csv"))
@@ -333,7 +311,7 @@ run_rda_all_variables <- function(
   )
 }
 
-# plot_rda_qq(results, phenotype, p_col)
+# plot_rda_qq()
 # Creates a quantile-quantile (QQ) plot for all RDA strategies
 # results = RDA results table
 # phenotype = Environmental variable to plot
@@ -346,15 +324,12 @@ plot_rda_qq <- function(
     p_col = "p_value"
 ) {
   
-  # Filter plot data for phenotype and valid p-value
   plot_data <- results %>%
     filter(phenotype == !!phenotype,
            !is.na(.data[[p_col]]), .data[[p_col]] > 0, .data[[p_col]] <= 1)
   
-  # Create qq data frame grouped by strategy
   qq_df <- plot_data %>%
     group_by(strategy) %>%
-    # For each strategy, sorts p-values and creates expected vs observed values
     group_modify(~{
       pvals <- sort(.x[[p_col]])
       data.frame(
@@ -364,7 +339,6 @@ plot_rda_qq <- function(
     }) %>%
     ungroup()
   
-  # Plot
   ggplot(qq_df, aes(x = expected, y = observed)) +
     geom_point(alpha = 0.6, size = 1) +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
@@ -375,4 +349,23 @@ plot_rda_qq <- function(
       y = "Observed -log10(p)"
     ) +
     theme_classic()
+}
+
+# load_rda_results()
+# Helper function to load RDA results from files
+load_rda_results <- function(config) {
+  
+  results_file <- file.path(config$rda$output_dir, "rda_all_results.csv")
+  evaluation_file <- file.path(config$rda$output_dir, "rda_all_evaluation.csv")
+  best_file <- file.path(config$rda$output_dir, "rda_best_strategy_by_var.csv")
+  
+  if (!all(file.exists(c(results_file, evaluation_file, best_file)))) {
+    stop("Saved RDA result files not found.")
+  }
+  
+  list(
+    results = read.csv(results_file, check.names = FALSE),
+    evaluation = read.csv(evaluation_file, check.names = FALSE),
+    best_by_variable = read.csv(best_file, check.names = FALSE)
+  )
 }

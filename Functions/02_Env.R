@@ -1,6 +1,5 @@
 # ---- Environmental variables ----
-# extract_climate_variables(metadata, lon_col, lat_col, sample_col, var, res,
-#                           climate_dir, output_file, overwrite)
+# extract_climate_variables()
 # Extracts WorldClim climate variables for each sample using its longitude and latitude
 # metadata = Metadata data frame containing coordinates
 # lon_col = Column name for longitude
@@ -31,28 +30,27 @@ extract_climate_variables <- function(
     return(read.csv(output_file, check.names = FALSE))
   }
   
-  # Check required longitude and latitude columns
   needed_cols <- c(lon_col, lat_col, sample_col)
   missing_cols <- needed_cols[!needed_cols %in% colnames(metadata)]
+  
   if (length(missing_cols) > 0) {
     stop("Missing columns in metadata: ", paste(missing_cols, collapse = ", "))
   }
   
-  # Number of samples with no longitude/latitude information
+  # Samples with no longitude/latitude information
   n_before <- nrow(metadata)
   # Filter samples with no longitude/latitude information
   metadata <- metadata %>%
     filter(!is.na(.data[[lon_col]]),
            !is.na(.data[[lat_col]]),
            !( .data[[lon_col]] == 0 & .data[[lat_col]] == 0 ))
-  # Number of filtered samples
   n_after <- nrow(metadata)
   
-  # Create directory to save extracted climate data
+  # Create directory for extracted climate data
   dir.create(climate_dir, recursive = TRUE, showWarnings = FALSE)
   dir.create(dirname(output_file), recursive = TRUE, showWarnings = FALSE)
   
-  # Extract raster data through geodata
+  # Extract raster data
   clim_rasters <- worldclim_global(
     var = var,
     res = res,
@@ -74,18 +72,16 @@ extract_climate_variables <- function(
   
   # Extract climatic variables
   climate_df <- extract(clim_rasters, points)
+  
   message("Climate data extracted for ", nrow(climate_df), " samples.")
   
-  # Remove terra's internal ID column
   climate_df <- climate_df[, -1, drop = FALSE]
-  # Add sample IDs
   climate_df[[sample_col]] <- metadata[[sample_col]]
-  # Sample IDs as first column
   climate_df <- climate_df[, c(sample_col, setdiff(colnames(climate_df), sample_col))]
+  
   # Keep only complete cases (no NAs)
   climate_df <- climate_df[complete.cases(climate_df),]
   
-  # Write data frame of climate variables
   write.csv(climate_df, output_file, row.names = FALSE)
 
   message("\nClimate extraction summary\n",
@@ -99,7 +95,7 @@ extract_climate_variables <- function(
 }
 
 # plot_climate_map()
-# Creates a map of sampling geographic locations of accessions with extracted climate data
+# Creates a map of geographic locations of accessions with extracted climate data
 # Points are colored by selected climatic variable
 # climate_data = Data frame of extracted climate variables
 # metadata = Metadata data frame with longitude and latitude columns
@@ -120,11 +116,9 @@ plot_climate_map <- function(
   
   world <- ne_countries(scale = "medium", returnclass = "sf")
   
-  # Extract plot data
   plot_data <- climate_data %>%
     left_join(metadata[, c(sample_col, lon_col, lat_col)], by = sample_col)
   
-  # Plot
   p <- ggplot() +
     geom_sf(data = world, fill = "gray95", color = "gray70", linewidth = 0.2) +
     geom_point(data = plot_data,
@@ -144,12 +138,11 @@ plot_climate_map <- function(
 }
 
 # plot_climate_cor_heatmap()
-# Creates a correlation matrix and heatmap among bioclimatic variables,
-# to identify highly correlated environmental predictors before GEA analysis
+# Creates a correlation matrix and heatmap among bioclimatic variables to identify highly correlated environmental predictors
 # climate_data = Data frame containing extracted climate variables.
 # bio_prefix = Prefix to identify bioclimatic variables, defaults to "BIO".
 # Output: A heatmap showing pairwise Pearson correlations among BIO variables
-# Returns: ggplot object.
+# Returns: ggplot object
 plot_climate_cor_heatmap <- function(
     climate_data,
     bio_prefix = "BIO"
@@ -186,17 +179,12 @@ plot_climate_cor_heatmap <- function(
 }
 
 # run_climate_pca()
-# Performs PCA on extracted bioclimatic variables,
-# summarizes main climatic gradients in sampled accessions
+# Performs PCA on extracted bioclimatic variables to summarize main climatic gradients
 # climate_data = Data frame of extracted climate variables
 # bio_prefix = Prefix used to identify bioclimatic variables, defaults to "BIO"
 # output_file = Optional path to save the PCA result as .rds file
 # Output: PCA object, PCA scores, variance explained, and list of variables used
-# Returns: List containing:
-# pca: prcomp PCA object
-# scores: Environmental PC scores for each sample
-# variance: Percent variance explained by each environmental PC
-# variables: BIO variables used in PCA
+# Returns: List containing pca, scores, variance and variables
 run_climate_pca <- function(
     climate_data,
     bio_prefix = "BIO",
@@ -211,18 +199,18 @@ run_climate_pca <- function(
   # PCA
   env_pca <- prcomp(env_data, center = TRUE, scale. = TRUE)
   
-  # Calculate variance explained
+  # Variance explained
   variance <- data.frame(
     PC = paste0("EnvPC", seq_along(env_pca$sdev)),
     Variance = (env_pca$sdev^2 / sum(env_pca$sdev^2)) * 100,
     CumulativeVariance = cumsum((env_pca$sdev^2 / sum(env_pca$sdev^2)) * 100)
   )
   
-  # Extract PC scores
+  # PC scores
   scores <- as.data.frame(env_pca$x)
   colnames(scores) <- paste0("EnvPC", seq_len(ncol(scores)))
   
-  # Calculate variable loadings
+  # Variable loadings
   loadings <- as.data.frame(env_pca$rotation)
   colnames(loadings) <- paste0("EnvPC", seq_len(ncol(loadings)))
   loadings$Variable <- rownames(loadings)
@@ -247,7 +235,7 @@ run_climate_pca <- function(
 
 # plot_climate_pca()
 # Plots selected environmental principal components from climate PCA result
-# climate_pca_result = Output from run_climate_pca().
+# climate_pca_result = Output from run_climate_pca()
 # pc_x = Environmental PC for x-axis
 # pc_y = Environmental PC for y-axis
 # Output: PCA scatterplot of bioclimatic variation among samples
@@ -258,19 +246,16 @@ plot_climate_pca <- function(
     pc_y = 2
 ) {
 
-  # Extract scores and variance
   scores <- climate_pca_result$scores
   variance <- climate_pca_result$variance
   
-  # Define PCs to plot
+  # PCs to plot
   x_col <- paste0("EnvPC", pc_x)
   y_col <- paste0("EnvPC", pc_y)
   
-  # Create labels
   x_lab <- paste0(x_col, " (", round(variance$Variance[pc_x], 2), "%)")
   y_lab <- paste0(y_col, " (", round(variance$Variance[pc_y], 2), "%)")
   
-  # Plot
   p <- ggplot(scores, aes(x = .data[[x_col]], y = .data[[y_col]])) +
     geom_point(alpha = 0.8) +
     labs(title = "PCA of bioclimatic variables",

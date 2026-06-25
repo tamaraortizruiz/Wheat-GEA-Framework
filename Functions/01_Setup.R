@@ -1,10 +1,9 @@
 # ---- Setup ----
 
 # create_project_dirs()
-# Creates the pipeline's folder structure
-# overwrite = If TRUE, removes and remakes existing folders
-# Output: Creates directories if they do not already exist:
-# Data, Output, Output/Kinship, Output/Structure, Output/GEA and Output/Plots
+# Creates the pipeline's project folder structure
+# overwrite = If TRUE, removes and remakes pipeline folders
+# Output: Creates required project directories
 create_project_dirs <- function(overwrite = FALSE) {
   dirs <- c(
     "Data",
@@ -15,8 +14,9 @@ create_project_dirs <- function(overwrite = FALSE) {
     "Output/GEA/LFMM",
     "Output/GEA/RDA",
     "Output/GEA/pcadapt",
-    "Output/Plots",
-    "Logs"
+    "Output/ConsensusSNP",
+    "Output/ConsensusLD",
+    "Output/AdaptiveScoring"
   )
   
   # Remove existing directories if overwrite = TRUE
@@ -30,7 +30,7 @@ create_project_dirs <- function(overwrite = FALSE) {
     }
   }
   
-  # Remake directories
+  # Create directories
   for (d in dirs) {
     dir.create(d, recursive = TRUE, showWarnings = FALSE)
   }

@@ -1,6 +1,6 @@
 # ---- Linear Mixed Model ----
 
-# prepare_gemma_phenotype(climate_data, fam_file, phenotype, sample_col, output_file)
+# prepare_gemma_phenotype()
 # Creates a phenotype file in GEMMA required format from environmental data
 # climate_data = Data frame with sample IDs and environmental variables
 # fam_file = PLINK .fam file for GEMMA analysis
@@ -17,31 +17,24 @@ prepare_gemma_phenotype <- function(
     output_file
 ) {
   
-  # Import .fam file
   fam <- read.table(fam_file, stringsAsFactors = FALSE)
-  # Set column names
   colnames(fam) <- c("family.ID",
                      "sample.ID",
                      "paternal.ID",
                      "maternal.ID",
                      "sex",
                      "phenotype")
-  # Format
   climate_data[[sample_col]] <- as.character(climate_data[[sample_col]])
   fam$sample.ID <- as.character(fam$sample.ID)
-  
-  # Match genotype to climate sample order
   climate_ordered <- climate_data[match(fam$sample.ID, climate_data[[sample_col]]), ]
   
-  # if genotype samples do not match climate_data
   if (any(is.na(climate_ordered[[sample_col]]))) {
     stop("Some FAM samples are missing from climate_data.")
   }
   
-  # Create data frame for selected phenotype
+  # Data frame for specific phenotype
   pheno <- climate_ordered[[phenotype]]
   
-  # Write prepared file
   dir.create(dirname(output_file), recursive = TRUE, showWarnings = FALSE)
   write.table(pheno, output_file, quote = FALSE, row.names = FALSE, col.names = FALSE)
   
@@ -50,7 +43,7 @@ prepare_gemma_phenotype <- function(
   return(output_file)
 }
 
-# select_best_strategy(evaluation, lambda_min, lambda_max)
+# select_best_strategy()
 # Selects the optimal population structure correction strategy
 # Criteria:
 # 1. Prioritize strategies with acceptable λGC values (0.8-1.2)
@@ -65,13 +58,12 @@ prepare_gemma_phenotype <- function(
 # evaluation = Evaluation table containing λGC and significance metrics
 # lambda_min = Lower acceptable λGC threshold
 # lambda_max = Upper acceptable λGC threshold
-# Returns: One-row data frame containing the selected strategy
+# Returns: Data frame containing the selected strategy
 select_best_strategy <- function(evaluation, lambda_min = 0.8, lambda_max = 1.2) {
   
-  # Formats evaluation table
   evaluation <- evaluation %>%
     mutate(
-      lambda_distance = abs(lambda_gc - 1),
+      lambda_distance = abs(lambda_gc - 1), # absolute lambda distance from 1
       lambda_acceptable = lambda_gc >= lambda_min & lambda_gc <= lambda_max,
       has_signal = n_bonferroni > 0 | n_fdr > 0
     )
@@ -87,6 +79,7 @@ select_best_strategy <- function(evaluation, lambda_min = 0.8, lambda_max = 1.2)
       ) %>%
       slice(1)
   } else if (any(evaluation$lambda_acceptable)) {
+    # if lambda_gc falls within acceptable range but there is no signal
     evaluation %>%
       filter(lambda_acceptable) %>%
       arrange(
@@ -96,6 +89,7 @@ select_best_strategy <- function(evaluation, lambda_min = 0.8, lambda_max = 1.2)
       ) %>%
       slice(1)
   } else {
+    # if lambda_gc does not fall within acceptable range
     evaluation %>%
       arrange(
         lambda_distance,
@@ -106,7 +100,7 @@ select_best_strategy <- function(evaluation, lambda_min = 0.8, lambda_max = 1.2)
   }
 }
 
-# prepare_gemma_covariates(covariates_file, output_file, sample_col, n_pcs)
+# prepare_gemma_covariates()
 # Creates a covariate file in GEMMA required format from PCA results
 # covariates_file = .csv file containing PCA covariates
 # output_file = Output path for the GEMMA covariate file
@@ -121,27 +115,25 @@ prepare_gemma_covariates <- function(
     n_pcs = 3
 ) {
   
-  # Read PCA covariates file
   covariates <- read.csv(covariates_file, check.names = FALSE)
   # Filter to selected PCs
   pc_cols <- paste0("PC", seq_len(n_pcs))
   covariates <- covariates[, pc_cols, drop = FALSE]
   
-  # Match samples to covariates
   if (sample_col %in% colnames(covariates)) {
     covariates <- covariates[, setdiff(colnames(covariates), sample_col), drop = FALSE]
   }
   
-  # Write covariates in requires GEMMA format
+  # Covariates in requires GEMMA format
   dir.create(dirname(output_file), recursive = TRUE, showWarnings = FALSE)
   write.table(covariates, output_file, quote = FALSE, row.names = FALSE, col.names = FALSE)
   
   message("GEMMA covariates saved to: ", output_file)
+  
   return(output_file)
 }
 
-# run_gemma_lmm(gemma, bfile, phenotype_file, kinship_file, covariates_file,
-#               output_prefix, output_dir)
+# run_gemma_lmm()
 # Runs a single GEMMA LMM
 # gemma = Path to the GEMMA executable
 # bfile = PLINK dataset prefix (.bed/.bim/.fam)
@@ -155,9 +147,12 @@ prepare_gemma_covariates <- function(
 run_gemma_lmm <- function(
     gemma = "gemma",
     bfile,
+    phenotype,
+    strategy,
     phenotype_file,
     kinship_file,
     covariates_file = NULL,
+    q_threshold = 0.05,
     output_prefix,
     output_dir = "Output/GEA/GEMMA"
 ) {
@@ -168,7 +163,7 @@ run_gemma_lmm <- function(
     stop("Could not create GEMMA output directory: ", output_dir)
   }
   
-  # Define arguments for GEMMA
+  # GEMMA arguments
   args <- c(
     "-bfile", bfile,
     "-p", phenotype_file,
@@ -186,17 +181,61 @@ run_gemma_lmm <- function(
   message("\nRunning GEMMA:")
   message(gemma, " ", paste(args, collapse = " "))
   
-  # Run GEMMA command
+  # Run GEMMA
   status <- system2(gemma, args = args)
   
   if (status != 0) {
     stop("GEMMA failed. Check GEMMA log files.")
   }
   
-  return(file.path(output_dir, paste0(output_prefix, ".assoc.txt")))
+  assoc_file <- file.path(output_dir, paste0(output_prefix, ".assoc.txt"))
+  
+  if (!file.exists(assoc_file)) {
+    stop("GEMMA association file was not created: ", assoc_file)
+  }
+  
+  result <- read.table(assoc_file, header = TRUE, stringsAsFactors = FALSE)
+  
+  result <- result %>%
+    mutate(
+      method = "GEMMA",
+      phenotype = phenotype,
+      strategy = strategy,
+      chr = chr,
+      marker = rs,
+      position = ps,
+      p_value = p_wald,
+      q_value = p.adjust(p_value, method = "fdr"),
+      bonferroni_threshold = 0.05 / n(),
+      bonferroni_significant = p_value < bonferroni_threshold,
+      fdr_significant = q_value < q_threshold
+    )
+  
+  # Genomic inflation factor
+  lambda_gc <- median(qchisq(1 - result$p_value, df = 1), na.rm = TRUE) / qchisq(0.5, df = 1)
+  
+  # Evaluation data frame
+  evaluation <- data.frame(
+    method = "GEMMA",
+    phenotype = phenotype,
+    strategy = strategy,
+    n_snps = nrow(result),
+    lambda_gc = lambda_gc,
+    min_p = min(result$p_value, na.rm = TRUE),
+    min_q = min(result$q_value, na.rm = TRUE),
+    n_bonferroni = sum(result$bonferroni_significant, na.rm = TRUE),
+    n_fdr = sum(result$fdr_significant, na.rm = TRUE),
+    bonferroni_threshold = unique(result$bonferroni_threshold)
+  )
+  
+  list(
+    assoc_file = assoc_file,
+    results = result,
+    evaluation = evaluation
+  )
 }
 
-# run_gemma_lmm_strategies(config, qc_prefix, climate_data, phenotype, kinship_file)
+# run_gemma_lmm_strategies()
 # Runs GEMMA across multiple population structure correction strategies
 # config = Configuration list loaded from YAML
 # qc_prefix = PLINK dataset prefix after QC and environmental filtering
@@ -205,8 +244,7 @@ run_gemma_lmm <- function(
 # strategies = Vector of number of PCs to use for structure correction (can be 0)
 # kinship_file = GEMMA kinship matrix generated from the genotype dataset
 # q_threshold = FDR threshold for significance
-# Returns: List containing results, evaluation, best_strategy, best_results and
-#          strategy results
+# Returns: List containing results, evaluation, best_strategy, best_results and strategy results
 run_gemma_lmm_strategies <- function(
     config,
     qc_prefix,
@@ -216,9 +254,9 @@ run_gemma_lmm_strategies <- function(
     q_threshold = config$gemma$q_threshold
 ) {
   
-  # Create lists to save output results
   all_results <- list()
   all_eval <- list()
+  all_runs <- list()
   
   # For each structure correction strategy
   for (n_pcs in config$gemma$pc_strategies) {
@@ -230,11 +268,11 @@ run_gemma_lmm_strategies <- function(
     
     message("\nRunning GEMMA strategy: ", strategy)
     
-    # Create GEMMA phenotype file path
+    # GEMMA phenotype file path
     pheno_file <- file.path(config$gemma$output_dir,
                             paste0("pheno_", phenotype, "_", strategy, ".txt"))
     
-    # Create GEMMA phenotype file
+    # GEMMA phenotype file
     gemma_pheno <- prepare_gemma_phenotype(
       climate_data = climate_data,
       fam_file = paste0(qc_prefix, ".fam"),
@@ -243,7 +281,7 @@ run_gemma_lmm_strategies <- function(
       output_file = pheno_file
     )
     
-    # Prepare covariates
+    # Covariates
     if (n_pcs == 0) {
       gemma_covariates <- NULL
     } else {
@@ -255,64 +293,27 @@ run_gemma_lmm_strategies <- function(
       )
     }
     
-    # Run GEMMA LMM
-    assoc_file <- run_gemma_lmm(
+    # Run GEMMA
+    gemma_run <- run_gemma_lmm(
       gemma = config$gemma$path,
       bfile = qc_prefix,
+      phenotype = phenotype,
+      strategy = strategy,
       phenotype_file = gemma_pheno,
       kinship_file = kinship_file,
+      q_threshold = q_threshold,
       covariates_file = gemma_covariates,
       output_prefix = paste0(phenotype, "_", strategy),
       output_dir = config$gemma$output_dir
     )
     
-    # Read GEMMA output file
-    result <- read.table(assoc_file, header = TRUE, stringsAsFactors = FALSE)
-    
-    # Construct structured results table
-    result <- result %>%
-      mutate(
-        method = "GEMMA",
-        phenotype = phenotype,
-        strategy = strategy,
-        chr = chr,
-        marker = rs,
-        position = ps,
-        p_value = p_wald,
-        q_value = p.adjust(p_value, method = "fdr"),
-        bonferroni_threshold = 0.05 / n(),
-        bonferroni_significant = p_value < bonferroni_threshold,
-        fdr_significant = q_value < q_threshold
-      )
-    
-    # Genomic inflation factor
-    lambda_gc <- median(qchisq(1 - result$p_value, df = 1), na.rm = TRUE) / qchisq(0.5, df = 1)
-    
-    # Construct evaluation data frame
-    evaluation <- data.frame(
-      method = "GEMMA",
-      phenotype = phenotype,
-      strategy = strategy,
-      n_snps = nrow(result),
-      lambda_gc = lambda_gc,
-      min_p = min(result$p_value, na.rm = TRUE),
-      n_bonferroni = sum(result$bonferroni_significant, na.rm = TRUE),
-      n_fdr = sum(result$fdr_significant, na.rm = TRUE),
-      bonferroni_threshold = unique(result$bonferroni_threshold)
-    )
-    
-    # Save to all results
-    all_results[[strategy]] <- result
-    all_eval[[strategy]] <- evaluation
+    all_results[[strategy]] <- gemma_run$results
+    all_eval[[strategy]] <- gemma_run$evaluation
+    all_runs[[strategy]] <- gemma_run # all per strategy objects (including association file)
   }
-  
-  # Bind all results
+
   results_all <- bind_rows(all_results)
-  
-  # Bind all result evaluations
   evaluation_all <- bind_rows(all_eval)
-  
-  # Best strategy
   best_strategy <- select_best_strategy(evaluation_all)$strategy[1]
   
   return(list(
@@ -320,11 +321,12 @@ run_gemma_lmm_strategies <- function(
     evaluation = evaluation_all,
     best_strategy = best_strategy,
     best_results = results_all %>% filter(strategy == best_strategy),
-    individual = all_results
+    individual = all_results,
+    runs = all_runs
   ))
 }
 
-# run_gemma_lmm_all_variables(config, qc_prefix, climate_data, kinship_file, phenotypes)
+# run_gemma_lmm_all_variables()
 # Runs GEMMA LMM across selected environmental variables and population structure correction strategies
 # config = Configuration list loaded from YAML
 # qc_prefix = PLINK dataset prefix after QC and environmental filtering
@@ -342,16 +344,13 @@ run_gemma_lmm_all_variables <- function(
     phenotypes = "BIO1"
 ) {
   
-  # Create list for results
   all_gemma <- list()
   
-  # For each variable
   for (phenotype in phenotypes) {
     message("\n==============================")
     message("Running GEMMA for: ", phenotype)
     message("==============================")
     
-    # Run all strategies
     all_gemma[[phenotype]] <- run_gemma_lmm_strategies(
       config = config,
       qc_prefix = qc_prefix,
@@ -361,17 +360,14 @@ run_gemma_lmm_all_variables <- function(
     )
   }
   
-  # Bind all results
   combined_results <- bind_rows(lapply(all_gemma, function(x) x$results))
   combined_evaluation <- bind_rows(lapply(all_gemma, function(x) x$evaluation))
   
-  # Best strategy for each variable
   best_by_variable <- combined_evaluation %>%
     group_by(phenotype) %>%
     group_modify(~ select_best_strategy(.x)) %>%
     ungroup()
   
-  # Write results
   write_csv(combined_results, file.path(config$gemma$output_dir, "gemma_all_results.csv"))
   write_csv(combined_evaluation, file.path(config$gemma$output_dir, "gemma_all_evaluation.csv"))
   write_csv(best_by_variable, file.path(config$gemma$output_dir, "gemma_best_strategy_by_var.csv"))
@@ -384,7 +380,7 @@ run_gemma_lmm_all_variables <- function(
   ))
 }
 
-# plot_gemma_qq(results, phenotype, p_col)
+# plot_gemma_qq()
 # Creates a quantile-quantile (QQ) plot for all GEMMA strategies
 # results = LMM results table
 # phenotype = Environmental variable to plot
@@ -397,15 +393,12 @@ plot_gemma_qq <- function(
     p_col = "p_value"
 ) {
   
-  # Filter plot data for phenotype and valid p-value
   plot_data <- results %>%
     filter(phenotype == !!phenotype,
            !is.na(.data[[p_col]]), .data[[p_col]] > 0, .data[[p_col]] <= 1)
   
-  # Create qq data frame grouped by strategy
   qq_df <- plot_data %>%
     group_by(strategy) %>%
-    # For each strategy, sorts p-values and creates expected vs observed values
     group_modify(~{
       pvals <- sort(.x[[p_col]])
       data.frame(
@@ -414,7 +407,6 @@ plot_gemma_qq <- function(
       )}) %>%
     ungroup()
   
-  # Plot
   ggplot(qq_df, aes(x = expected, y = observed)) +
     geom_point(alpha = 0.6, size = 1) +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
@@ -423,4 +415,23 @@ plot_gemma_qq <- function(
          x = "Expected -log10(p)",
          y = "Observed -log10(p)") +
     theme_classic()
+}
+
+# load_gemma_results()
+# Helper function to load gemma results from files
+load_gemma_results <- function(config) {
+  
+  results_file <- file.path(config$gemma$output_dir, "gemma_all_results.csv")
+  evaluation_file <- file.path(config$gemma$output_dir, "gemma_all_evaluation.csv")
+  best_file <- file.path(config$gemma$output_dir, "gemma_best_strategy_by_var.csv")
+  
+  if (!all(file.exists(c(results_file, evaluation_file, best_file)))) {
+    stop("Saved GEMMA result files not found")
+  }
+  
+  list(
+    results = read.csv(results_file, check.names = FALSE),
+    evaluation = read.csv(evaluation_file, check.names = FALSE),
+    best_by_variable = read.csv(best_file, check.names = FALSE)
+  )
 }
