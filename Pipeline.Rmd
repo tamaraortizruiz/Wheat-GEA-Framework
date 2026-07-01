@@ -105,6 +105,7 @@ climate_pca <- run_climate_pca(
 # Plots PCA
 plot_climate_pca(climate_pca)
 ```
+
 # Genotype Quality Control
 ```{r, eval = run_qc, include = run_qc}
 qc_files <- paste0(config$qc_outputs$qc_prefix, c(".bed", ".bim", ".fam"))
@@ -456,7 +457,8 @@ plot_pcadapt_qq(
   results = pcadapt_results$results
 )
 ```
-# Consensus SNPs
+
+# Consensus SNP sets
 ## Construction
 ```{r, eval = run_consensus, include = run_consensus}
 # if overwrite = FALSE and consensus set files exist for all phenotypes
@@ -481,24 +483,33 @@ if (!config$run$overwrite && consensus_files_exist(config, phenotypes = config$e
 
 ## Evaluation
 ```{r, eval = run_consensus, include = run_consensus}
+# Consensus set evaluation
 consensus_results$evaluation %>%
   reactable()
 
-# For each phenotype print results 
-for (phenotype in config$env$vars) {
-  cat("\n\n##", phenotype, "\n\n")
-  cat("\n\n### Broad consensus: at least 2 methods\n\n")
-  print(consensus_results$by_variable[[phenotype]]$broad_2methods %>%
-          reactable())
-  
-  cat("\n\n### Environmental consensus: at least 2 GEA methods\n\n")
-  print(consensus_results$by_variable[[phenotype]]$env_2methods %>%
-          reactable())
-  
-  cat("\n\n### High-confidence consensus\n\n")
-  print(consensus_results$by_variable[[phenotype]]$high_confidence %>%
-          reactable())
-}
+# Consensus sets for each variable
+consensus_sets <- tagList(
+  lapply(config$env$vars, function(phenotype) {
+    res <- consensus_results$by_variable[[phenotype]]
+    
+    tagList(
+      tags$h2(phenotype),
+      
+      tags$h3("Broad consensus"),
+      make_reactable(res$broad_2methods),
+      
+      tags$h3("Environmental consensus"),
+      make_reactable(res$env_2methods),
+      
+      tags$h3("High-confidence consensus"),
+      make_reactable(res$high_confidence),
+      
+      tags$hr()
+    )
+  })
+)
+
+consensus_sets
 ```
 
 # Post-Hoc LD Block Pruning
@@ -521,7 +532,7 @@ if (!config$run$overwrite && ld_block_files_exist(config, phenotypes = config$en
   )
 }
 ```
-
+## Results
 ```{r, eval = run_consensus_ld, include = run_consensus_ld}
 ld_results$summary %>%
   reactable()
@@ -529,21 +540,70 @@ ld_results$summary %>%
 
 # Robustness Evaluation
 ```{r, eval = run_consensus_r, include = run_consensus_r}
+# Runs robustness evaluation
 robustness_results <- run_consensus_robustness(
   ld_results = ld_results,
   output_dir = config$consensus_robustness$output_dir
 )
 
+# Evaluation results
 robustness_results$evaluation %>%
   select(-lead_snp_signature) %>%
   reactable()
 
+# Selected primary sets evaluation summary
 robustness_results$primary_summary %>%
   select(-lead_snp_signature) %>%
   reactable()
 
+# Primary lead SNPs from primary consensus sets for all variables
 robustness_results$primary_lead_snps %>%
   reactable()
 ```
 
+# Adaptive Scoring
+
+```{r}
+# Calculate adaptive score (for each variable) for all accessions
+adaptive_results <- run_adaptive_germplasm_scoring(
+  robustness_results = robustness_results,
+  gemma_results = gemma_results,
+  rda_results = rda_results,
+  lfmm_results = lfmm_results,
+  qc_prefix = qc_prefix,
+  metadata = metadata,
+  output_dir = config$adaptive_scoring$output_dir,
+  sample_col = config$metadata$sample_col,
+  overwrite = FALSE
+)
+```
+
+## Results
+
+```{r, results='asis'}
+# Adaptive score summary
+adaptive_results$adaptive_score_summary %>%
+  reactable()
+
+# Adaptive scores for each variable
+adaptive_scores <- adaptive_results$adaptive_scores
+for (phenotype_name in unique(adaptive_scores$phenotype)) {
+  cat("\n\n## Top adaptive accessions:", phenotype_name, "\n\n")
+  
+  table_data <- adaptive_scores %>%
+    filter(phenotype == phenotype_name) %>%
+    arrange(desc(adaptive_score))
+  
+  print(
+    tagList(
+      reactable(
+        table_data,
+        searchable = TRUE,
+        pagination = TRUE,
+        defaultPageSize = 10
+        )
+    )
+  )
+}
+```
 

@@ -1,4 +1,4 @@
-# ---- Quality Control ----
+# ---- Genotype Quality Control ----
 
 # run_plink()
 # Runs PLINK command from R using system2()

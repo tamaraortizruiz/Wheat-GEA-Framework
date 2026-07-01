@@ -1,4 +1,5 @@
 # ---- Latent Factor Mixed Model ----
+
 # impute_geno_mean()
 # Performs mean imputation of missing genotype values for each SNP
 # geno = Genotype matrix or bigsnpr genotype object with samples as rows and SNPs as columns

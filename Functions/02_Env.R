@@ -1,4 +1,5 @@
-# ---- Environmental variables ----
+# ---- Environmental data processing ----
+
 # extract_climate_variables()
 # Extracts WorldClim climate variables for each sample using its longitude and latitude
 # metadata = Metadata data frame containing coordinates

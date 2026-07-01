@@ -120,17 +120,29 @@ run_rda_single <- function(
     rda_model <- rda(rda_formula, data = model_data)
   }
   
-  # Scores
-  snp_scores <- scores(
-    rda_model,
-    display = "species",
-    choices = 1
-  )
+  # Sample scores on constrained RDA axis 1
+  site_scores <- scores(rda_model, display = "lc", choices = 1)
+  site_scores <- as.numeric(as.matrix(site_scores)[, 1])
   
-  # Loadings
-  rda_loading <- as.numeric(snp_scores[, 1])
+  # Correlate RDA1 sample scores with environmental variable
+  axis_env_cor <- cor(site_scores, env$env, use = "complete.obs")
   
-  z_scores <- as.numeric(scale(rda_loading))
+  # SNP loadings on constrained RDA axis 1
+  snp_scores <- scores(rda_model, display = "species", choices = 1)
+  
+  raw_rda_loading <- as.numeric(snp_scores[, 1])
+  
+  # Flip RDA loadings if RDA1 opposite to the environmental gradient
+  axis_flipped <- !is.na(axis_env_cor) && axis_env_cor < 0
+  
+  oriented_rda_loading <- if (axis_flipped) {
+    -raw_rda_loading
+  } else {
+    raw_rda_loading
+  }
+  
+  # Oriented loading for z-scores
+  z_scores <- as.numeric(scale(oriented_rda_loading))
   p_values <- 2 * pnorm(-abs(z_scores))
   
   result <- map %>%
@@ -140,7 +152,10 @@ run_rda_single <- function(
       strategy = strategy,
       marker = if ("marker.ID" %in% colnames(map)) marker.ID else rownames(map),
       rda_axis = "RDA1",
-      rda_loading = rda_loading,
+      rda_loading = raw_rda_loading,
+      oriented_rda_loading = oriented_rda_loading,
+      axis_env_cor = axis_env_cor,
+      axis_flipped = axis_flipped,
       z_score = z_scores,
       p_value = p_values,
       q_value = p.adjust(p_value, method = "fdr"),

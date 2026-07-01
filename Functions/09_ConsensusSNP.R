@@ -431,3 +431,17 @@ load_consensus_results <- function(
   )
 }
 
+# make_reactable()
+# Makes interactive reactable data frame for HTML
+make_reactable <- function(df) {
+  if (is.null(df) || nrow(df) == 0) {
+    tags$p("No SNPs in this consensus set")
+  } else {
+    reactable(
+      df,
+      searchable = TRUE,
+      pagination = TRUE,
+      defaultPageSize = 10
+    )
+  }
+}

@@ -17,7 +17,8 @@ cran_packages <- c(
   "reactable",
   "vegan",
   "pcadapt",
-  "igraph"
+  "igraph",
+  "htmltools"
 )
 
 bio_packages <- c(

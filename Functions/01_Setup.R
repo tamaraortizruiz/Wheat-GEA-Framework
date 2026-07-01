@@ -16,7 +16,7 @@ create_project_dirs <- function(overwrite = FALSE) {
     "Output/GEA/pcadapt",
     "Output/ConsensusSNP",
     "Output/ConsensusLD",
-    "Output/AdaptiveScoring"
+    "Output/ConsensusRobustness"
   )
   
   # Remove existing directories if overwrite = TRUE

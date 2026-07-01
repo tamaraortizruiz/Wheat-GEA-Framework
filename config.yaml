@@ -130,3 +130,7 @@ ld_pruning_ph:
 # Consensus set robustness evaluation
 consensus_robustness:
   output_dir: "Output/ConsensusRobustness" #DNC
+
+# Accession-level adaptive scoring
+adaptive_scoring:
+  output_dir: "Output/AdaptiveScoring" #DNC
