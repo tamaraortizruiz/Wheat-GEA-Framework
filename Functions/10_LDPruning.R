@@ -236,7 +236,7 @@ define_ld_blocks <- function(
   
   # Undirected graph
   graph <- graph_from_data_frame(
-    d = ld_edges %>% select(snp_a, snp_b),
+    d = ld_edges %>% dplyr::select(snp_a, snp_b),
     directed = FALSE,
     vertices = vertices)
   
@@ -248,12 +248,12 @@ define_ld_blocks <- function(
     component_id = as.integer(components)
   )
   block_df <- block_df %>%
-    left_join(consensus_df %>% select(marker, chr, position), by = "marker")
+    left_join(consensus_df %>% dplyr::select(marker, chr, position), by = "marker")
   
   block_order <- block_df %>%
     group_by(component_id) %>%
     summarise(
-      chr = first(na.omit(chr)),
+      chr = dplyr::first(na.omit(chr)),
       min_position = suppressWarnings(min(position, na.rm = TRUE)),
       .groups = "drop"
     ) %>%
@@ -264,16 +264,16 @@ define_ld_blocks <- function(
     mutate(ld_block = paste0("LD", row_number()))
   
   block_df <- block_df %>%
-    left_join(block_order %>% select(component_id, ld_block), by = "component_id")
+    left_join(block_order %>% dplyr::select(component_id, ld_block), by = "component_id")
   
   # Maximum R2 per block
   edge_blocks <- ld_edges %>%
     # Attach component ID to SNP A
-    left_join(block_df %>% select(marker, component_id), by = c("snp_a" = "marker")) %>%
-    rename(component_a = component_id) %>%
+    left_join(block_df %>% dplyr::select(marker, component_id), by = c("snp_a" = "marker")) %>%
+    dplyr::rename(component_a = component_id) %>%
     # Attach component ID to SNP B
-    left_join(block_df %>% select(marker, component_id), by = c("snp_b" = "marker")) %>%
-    rename(component_b = component_id) %>%
+    left_join(block_df %>% dplyr::select(marker, component_id), by = c("snp_b" = "marker")) %>%
+    dplyr::rename(component_b = component_id) %>%
     filter(component_a == component_b) %>%
     group_by(component_a) %>%
     # Max R2 in block
@@ -281,14 +281,14 @@ define_ld_blocks <- function(
       max_r2_in_block = max(r2, na.rm = TRUE),
       .groups = "drop"
     ) %>%
-    rename(component_id = component_a)
+    dplyr::rename(component_id = component_a)
   
   block_df %>%
     group_by(ld_block) %>%
     mutate(block_size = n()) %>%
     ungroup() %>%
     left_join(edge_blocks, by = "component_id") %>%
-    select(marker, ld_block, block_size, max_r2_in_block) %>%
+    dplyr::select(marker, ld_block, block_size, max_r2_in_block) %>%
     arrange(ld_block) %>%
     as.data.frame()
 }
@@ -301,8 +301,9 @@ define_ld_blocks <- function(
 choose_lead_snps <- function(consensus_df, ld_blocks) {
   
   annotated <- consensus_df %>%
-    left_join(ld_blocks, by = "marker")
+    dplyr::left_join(ld_blocks, by = "marker")
   
+  # Add missing optional columns if needed
   if (!"n_env_methods" %in% colnames(annotated)) {
     annotated$n_env_methods <- NA_real_
   }
@@ -323,37 +324,26 @@ choose_lead_snps <- function(consensus_df, ld_blocks) {
     annotated$min_env_p <- NA_real_
   }
   
-  annotated <- annotated %>%
-    mutate(
-      env_method_order = ifelse(is.na(n_env_methods), -Inf, n_env_methods),
-      total_method_order = ifelse(is.na(n_methods), -Inf, n_methods),
-      pcadapt_order = ifelse(is.na(pcadapt_support), 0, as.integer(pcadapt_support)),
-      min_env_q_order = ifelse(is.na(min_env_q), Inf, min_env_q),
-      min_q_order = ifelse(is.na(min_q), Inf, min_q),
-      min_env_p_order = ifelse(is.na(min_env_p), Inf, min_env_p),
-      min_p_order = ifelse(is.na(min_p), Inf, min_p)
-    )
-  
   # Lead SNP selection
   lead_snps <- annotated %>%
-    group_by(ld_block) %>%
+    group_by(.data$ld_block) %>%
     arrange(
-      desc(total_method_order),
-      desc(env_method_order),
-      desc(pcadapt_order),
-      min_env_q_order,
-      min_q_order,
-      min_env_p_order,
-      min_p_order,
+      desc(coalesce(.data$n_methods, -Inf)),
+      desc(coalesce(.data$n_env_methods, -Inf)),
+      desc(coalesce(as.integer(.data$pcadapt_support), 0L)),
+      coalesce(.data$min_env_q, Inf),
+      coalesce(.data$min_q, Inf),
+      coalesce(.data$min_env_p, Inf),
+      coalesce(.data$min_p, Inf),
       .by_group = TRUE
     ) %>%
-    slice(1) %>%
+    dplyr::slice(1) %>%
     ungroup() %>%
     mutate(is_lead = TRUE)
   
   all_candidates <- annotated %>%
-    mutate(is_lead = marker %in% lead_snps$marker) %>%
-    arrange(chr, position, ld_block, desc(is_lead))
+    mutate(is_lead = .data$marker %in% lead_snps$marker) %>%
+    arrange(.data$chr, .data$position, .data$ld_block, desc(.data$is_lead))
   
   list(
     all_candidates = all_candidates,

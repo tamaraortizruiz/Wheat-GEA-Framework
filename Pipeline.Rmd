@@ -29,6 +29,8 @@ run_pcadapt <- isTRUE(config$analysis$run_pcadapt)
 run_consensus <- isTRUE(config$analysis$run_consensus)
 run_consensus_ld <- isTRUE(config$analysis$run_consensus_ld)
 run_consensus_r <- isTRUE(config$analysis$run_consensus_robustness)
+run_adaptive_scoring <- isTRUE(config$analysis$run_adaptive_scoring)
+run_bio_interp <- isTRUE(config$analysis$run_bio_interp)
 ```
 
 # Environmental Data Processing
@@ -548,12 +550,12 @@ robustness_results <- run_consensus_robustness(
 
 # Evaluation results
 robustness_results$evaluation %>%
-  select(-lead_snp_signature) %>%
+  dplyr::select(-lead_snp_signature) %>%
   reactable()
 
 # Selected primary sets evaluation summary
 robustness_results$primary_summary %>%
-  select(-lead_snp_signature) %>%
+  dplyr::select(-lead_snp_signature) %>%
   reactable()
 
 # Primary lead SNPs from primary consensus sets for all variables
@@ -562,8 +564,7 @@ robustness_results$primary_lead_snps %>%
 ```
 
 # Adaptive Scoring
-
-```{r}
+```{r, eval = run_adaptive_scoring, include = run_adaptive_scoring}
 # Calculate adaptive score (for each variable) for all accessions
 adaptive_results <- run_adaptive_germplasm_scoring(
   robustness_results = robustness_results,
@@ -579,8 +580,7 @@ adaptive_results <- run_adaptive_germplasm_scoring(
 ```
 
 ## Results
-
-```{r, results='asis'}
+```{r, eval = run_adaptive_scoring, include = run_adaptive_scoring, results='asis'}
 # Adaptive score summary
 adaptive_results$adaptive_score_summary %>%
   reactable()
@@ -606,4 +606,38 @@ for (phenotype_name in unique(adaptive_scores$phenotype)) {
   )
 }
 ```
+
+# Biological Interpretation
+```{r, eval = run_bio_interp, include = run_bio_interp}
+biointerp_df <- run_biointerpretation_workflow(
+  config = config,
+  robustness_results = robustness_results,
+  overwrite_annotation = config$run$overwrite
+)
+```
+
+```{r}
+biointerp_df %>%
+  reactable(
+    searchable = TRUE,
+    pagination = TRUE,
+    defaultPageSize = 10,
+    defaultColDef = colDef(
+      format = colFormat(digits = 3)
+    )
+  )
+
+candidate_gene_summary <- summarize_candidate_genes(biointerp_df)
+  
+candidate_gene_summary %>% 
+  reactable(
+    searchable = TRUE,
+    pagination = TRUE,
+    defaultPageSize = 10,
+    defaultColDef = colDef(
+      format = colFormat(digits = 3)
+    )
+  )
+```
+
 

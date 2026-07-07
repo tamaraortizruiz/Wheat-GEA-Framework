@@ -77,7 +77,7 @@ select_best_strategy <- function(evaluation, lambda_min = 0.8, lambda_max = 1.2)
         desc(n_bonferroni),
         desc(n_fdr)
       ) %>%
-      slice(1)
+      dplyr::slice(1)
   } else if (any(evaluation$lambda_acceptable)) {
     # if lambda_gc falls within acceptable range but there is no signal
     evaluation %>%
@@ -87,7 +87,7 @@ select_best_strategy <- function(evaluation, lambda_min = 0.8, lambda_max = 1.2)
         desc(n_bonferroni),
         desc(n_fdr)
       ) %>%
-      slice(1)
+      dplyr::slice(1)
   } else {
     # if lambda_gc does not fall within acceptable range
     evaluation %>%
@@ -96,7 +96,7 @@ select_best_strategy <- function(evaluation, lambda_min = 0.8, lambda_max = 1.2)
         desc(n_bonferroni),
         desc(n_fdr)
       ) %>%
-      slice(1)
+      dplyr::slice(1)
   }
 }
 

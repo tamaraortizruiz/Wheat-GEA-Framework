@@ -18,11 +18,16 @@ cran_packages <- c(
   "vegan",
   "pcadapt",
   "igraph",
-  "htmltools"
+  "htmltools",
+  "GenomicRanges",
+  "IRanges",
+  "GenomeInfoDb",
+  "rtracklayer"
 )
 
 bio_packages <- c(
-  "LEA"
+  "LEA",
+  "biomaRt"
 )
 
 # Install missing CRAN packages

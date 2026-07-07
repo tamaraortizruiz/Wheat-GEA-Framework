@@ -21,6 +21,8 @@ analysis:
   run_consensus: true
   run_consensus_ld: true
   run_consensus_robustness: true
+  run_adaptive_scoring: true
+  run_bio_interp: true
 
 # User defined input genotype files
 genotype:
@@ -134,3 +136,11 @@ consensus_robustness:
 # Accession-level adaptive scoring
 adaptive_scoring:
   output_dir: "Output/AdaptiveScoring" #DNC
+  
+# Biological interpretation
+biological_interpretation:
+  gene_annotation_file: "RawData/IWGSC_RefSeq_v2.1_annotation.gff3" # Wheat annotation file (DNC unless adapting for other crops)
+  output_dir: "Output/BioInterpretation" #DNC
+  flank_bp: 10000
+  use_biomart: true
+  tf_annotation_file: "RawData/wheatpro_TFlist_GRN.csv" # Optional user-defined TF annotation file

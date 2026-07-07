@@ -2,6 +2,10 @@
 
 # make_direction_table()
 # Make direction table for one method
+# method_results = Method specific results
+# value_col = Method specific direction value column
+# source_name = Direction source method
+# Returns: Formatted method results with direction information
 make_direction_table <- function(
     method_results,
     value_col,
@@ -29,13 +33,18 @@ make_direction_table <- function(
     group_by(phenotype, marker) %>%
     # smallest p-value
     arrange(p_value, .by_group = TRUE) %>%
-    slice(1) %>%
+    dplyr::slice(1) %>%
     ungroup()
 }
 
 
 # infer_adaptive_snp_direction()
 # Infer adaptive direction for primary lead SNPs
+# primary_lead_snps = Selected primary lead SNPs
+# gemma_results = GEMMA GEA results
+# rda_results = RDA GEA results
+# lfmm_results = LFMM GEA results
+# Returns: Primary lead SNPs with direction information
 infer_adaptive_snp_direction <- function(
     primary_lead_snps,
     gemma_results,
@@ -44,7 +53,7 @@ infer_adaptive_snp_direction <- function(
 ) {
   
   primary_snps <- primary_lead_snps %>%
-    select(phenotype, marker) %>%
+    dplyr::select(phenotype, marker) %>%
     mutate(
       phenotype = as.character(phenotype),
       marker = as.character(marker)
@@ -76,7 +85,7 @@ infer_adaptive_snp_direction <- function(
   primary_snps %>%
     left_join(
       gemma_direction %>%
-        select(
+        dplyr::select(
           phenotype,
           marker,
           gemma_direction = direction,
@@ -86,7 +95,7 @@ infer_adaptive_snp_direction <- function(
     ) %>%
     left_join(
       rda_direction %>%
-        select(
+        dplyr::select(
           phenotype,
           marker,
           rda_direction = direction,
@@ -96,7 +105,7 @@ infer_adaptive_snp_direction <- function(
     ) %>%
     left_join(
       lfmm_direction %>%
-        select(
+        dplyr::select(
           phenotype,
           marker,
           lfmm_direction = direction,
@@ -130,6 +139,12 @@ infer_adaptive_snp_direction <- function(
 
 # score_accessions_one_variable()
 # Score accessions for one environmental variable
+# geno = Genotype data matrix
+# map = Genotype marker map
+# fam = Sample information
+# direction_table = Output data frame from infer_adaptive_snp_direction()
+# phenotype = Environmental variable
+# Returns: Ranked accessions scores for a single phenotype
 score_accessions_one_variable <- function(
     geno,
     map,
@@ -204,6 +219,17 @@ score_accessions_one_variable <- function(
 
 
 # run_adaptive_germplasm_scoring()
+# robustness_results = Consensus robustness results
+# gemma_results = GEMMA GEA results
+# rda_results = RDA GEA results
+# lfmm_results = LFMM GEA results
+# qc_prefix = QC filtered PLINK prefix
+# metadata = Aligned metadata data frame
+# output_dir = Adaptive scoring output directory
+# sample_col = Sample identifier column in metadata
+# overwrite = defaults to FALSE, uses existing results
+# Returns: List of marker effect direction table, direction summary, sample adaptive scores,
+#         top 50 adaptive accessions per variable, and adaptive score summary
 run_adaptive_germplasm_scoring <- function(
     robustness_results,
     gemma_results,
@@ -228,7 +254,7 @@ run_adaptive_germplasm_scoring <- function(
   
   primary_lead_snps <- primary_lead_snps %>%
     filter(selected_primary == TRUE, is_lead == TRUE) %>%
-    select(phenotype, marker) %>%
+    dplyr::select(phenotype, marker) %>%
     mutate(
       phenotype = as.character(phenotype),
       marker = as.character(marker)
@@ -282,6 +308,9 @@ run_adaptive_germplasm_scoring <- function(
       adaptive_scores = adaptive_scores
     ))
   }
+  
+  message("\n A high adaptive score means the accession carries many copies of alleles associated with higher values of the environmental variable
+  \nA low adaptive score means the accession carries fewer copies of those alleles, or more copies of alleles associated with the opposite end of the environmental gradient")
   
   # Produce adaptive scores for each accessions (ranked order)
   adaptive_scores <- adaptive_scores %>%

@@ -49,7 +49,7 @@ create_keep_file <- function(
   
   keep_df <- fam %>%
     filter(sample.ID %in% metadata[[sample_col]]) %>%
-    select(family.ID, sample.ID)
+    dplyr::select(family.ID, sample.ID)
   
   if (nrow(keep_df) == 0) {
     stop("No matching samples between metadata subset and FAM file")

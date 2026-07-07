@@ -47,6 +47,7 @@ The following files should be placed in `RawData/` before running the pipeline:
 - PLINK genotype files (`.bed`, `.bim`, `.fam`)
 - Passport metadata containing sample identifiers and geographic coordinates (longitude and latitude)
 - Optional sample subsets or marker subsets
+- Optional TF annotation files
 
 These input file paths should be updated in the pipeline configuration file.
 

@@ -1,10 +1,10 @@
 # ---- Consensus Robustness Evaluation Module ----
 
-# summarize_robustness_all_sets(ld_results)
+# summarize_robustness_all_sets()
 # Builds robustness metrics from LD pruned consensus results
 # ld_results = Output from LD pruning module
+# Returns: Robustness result summary
 summarize_robustness_all_sets <- function(ld_results) {
-  
   robustness_list <- list()
   
   # For each variable
@@ -88,8 +88,11 @@ scale_component <- function(x, has_lead_snps) {
   (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
 }
 
-# score_consensus_robustness(robustness_summary, method_weight, ld_weight, evidence_weight)
+# score_consensus_robustness()
 # Scales metrics within each phenotype and calculates robustness score
+# robustness_summary = summarize_robustness_all_sets() output
+# method_weight, ld_weight, evidence weights = Priority weights
+# Returns: Robustness summary scored using priority weights
 score_consensus_robustness <- function(
     robustness_summary,
     method_weight = 0.4,
@@ -117,8 +120,12 @@ score_consensus_robustness <- function(
     ungroup()
 }
 
-# run_consensus_robustness(ld_results, output_dir)
+# run_consensus_robustness()
 # Evaluates LD pruned consensus sets and selects a representative primary set
+# ld_results = LD block pruning results
+# output_dir = Output directory
+# Returns: List of robustness metrics, robustness evaluation, primary SNPs summary,
+#         and selected primary lead SNPs
 run_consensus_robustness <- function(
     ld_results,
     output_dir = "Output/Consensus_Robustness"
@@ -218,7 +225,7 @@ run_consensus_robustness <- function(
     # All results
     ungroup() %>%
     # Columns for final evaluation table
-    select(
+    dplyr::select(
       phenotype,
       consensus_set,
       robustness_score,

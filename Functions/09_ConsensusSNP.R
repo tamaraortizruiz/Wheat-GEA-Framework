@@ -96,13 +96,13 @@ prepare_consensus_inputs <- function(
   
   # Best GEA method results
   gemma_best <- gemma_results$results %>%
-    inner_join(gemma_results$best_by_variable %>% select(phenotype, strategy),
+    inner_join(gemma_results$best_by_variable %>% dplyr::select(phenotype, strategy),
                by = c("phenotype", "strategy"))
   lfmm_best <- lfmm_results$results %>%
-    inner_join(lfmm_results$best_by_variable %>% select(phenotype, strategy),
+    inner_join(lfmm_results$best_by_variable %>% dplyr::select(phenotype, strategy),
                by = c("phenotype", "strategy"))
   rda_best <- rda_results$results %>%
-    inner_join(rda_results$best_by_variable %>% select(phenotype, strategy),
+    inner_join(rda_results$best_by_variable %>% dplyr::select(phenotype, strategy),
                by = c("phenotype", "strategy"))
   
   # Standardize GEA results
@@ -164,8 +164,8 @@ build_consensus_categories <- function(consensus_input) {
     ) %>%
     group_by(phenotype, marker) %>%
     summarise(
-      chr = first(na.omit(chr), default = NA_character_),
-      position = first(na.omit(position), default = NA_real_),
+      chr = dplyr::first(na.omit(chr), default = NA_character_),
+      position = dplyr::first(na.omit(position), default = NA_real_),
       n_methods = n_distinct(method),
       methods = paste(sort(unique(method)), collapse = ";"),
       n_env_methods = n_distinct(method[is_env_method]),
