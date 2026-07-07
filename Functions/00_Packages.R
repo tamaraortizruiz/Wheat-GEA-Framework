@@ -1,5 +1,7 @@
 # ---- Package installation and loading ----
 
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
 cran_packages <- c(
   "bigsnpr",
   "bigstatsr",
@@ -18,17 +20,18 @@ cran_packages <- c(
   "vegan",
   "pcadapt",
   "igraph",
-  "htmltools",
-  "GenomicRanges",
-  "IRanges",
-  "GenomeInfoDb",
-  "rtracklayer"
+  "htmltools"
 )
 
 bio_packages <- c(
+  "GenomicRanges",
+  "IRanges",
+  "GenomeInfoDb",
+  "rtracklayer",
   "LEA",
   "biomaRt"
 )
+
 
 # Install missing CRAN packages
 missing_cran <- cran_packages[!cran_packages %in% rownames(installed.packages())]
