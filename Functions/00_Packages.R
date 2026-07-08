@@ -36,7 +36,7 @@ bio_packages <- c(
 # Install missing CRAN packages
 missing_cran <- cran_packages[!cran_packages %in% rownames(installed.packages())]
 if (length(missing_cran) > 0) {
-  install.packages(missing_cran, dependencies = TRUE)
+  install.packages(missing_cran, dependencies = c("Depends", "Imports", "LinkingTo"))
 }
 
 # Install BiocManager if needed
