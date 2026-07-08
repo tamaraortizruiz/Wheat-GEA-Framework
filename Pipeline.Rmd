@@ -1,5 +1,5 @@
 ---
-title: "Pipeline"
+title: "`r yaml::read_yaml('config.yaml')$project$name`"
 output:
   html_document:
     toc: true

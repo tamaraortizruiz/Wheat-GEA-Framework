@@ -1,5 +1,5 @@
 project:
-  name: wheat_GEA_pipeline
+  name: "Bread Wheat GEA Pipeline"
   
 run:
   overwrite: false # if TRUE, deletes all existing files and reruns the pipeline from scratch
@@ -144,3 +144,4 @@ biological_interpretation:
   flank_bp: 10000
   use_biomart: true
   tf_annotation_file: "RawData/wheatpro_TFlist_GRN.csv" # Optional user-defined TF annotation file
+  
