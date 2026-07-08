@@ -1,6 +1,6 @@
 # ---- Package installation and loading ----
 
-options(repos = c(CRAN = "https://cloud.r-project.org"))
+options(repos = c(CRAN = "https://cran.rstudio.com"))
 
 cran_packages <- c(
   "bigsnpr",
