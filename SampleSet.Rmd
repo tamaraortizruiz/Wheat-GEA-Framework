@@ -5,7 +5,9 @@ output: html_document
 
 ```{r} 
 library(dplyr)
-metadata <- read.csv("RawData/metadata_BW.csv")
+metadata <- read.csv("RawData/passportinfo 1.csv")
+fam <- read.table("RawData/Wheat_all.fam", header = FALSE, stringsAsFactors = FALSE)
+metadata <- metadata[metadata$SeedID %in% fam$V1,]
 
 # sampling 10% of each country
 set.seed(10)

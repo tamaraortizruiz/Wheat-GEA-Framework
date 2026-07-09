@@ -287,10 +287,14 @@ if (!config$run$overwrite && all(file.exists(gemma_files))) {
 ```
 
 ### Results
+#### Evaluation
 ```{r, eval = run_lmm, include = run_lmm}
 gemma_results$evaluation %>%
   reactable()
+```
 
+#### Best by variable
+```{r, eval = run_lmm, include = run_lmm}
 gemma_results$best_by_variable %>%
   reactable()
 ```
@@ -340,14 +344,21 @@ if (!config$run$overwrite && all(file.exists(lfmm_files))) {
     climate_data = climate_data,
     phenotypes = config$env$vars
   )
+  
+  rm(qc_obj, G_qc, map_qc, fam_qc)
+  gc()
 }
 ```
 
 ### Results
+#### Evaluation
 ```{r, eval = run_lfmm, include = run_lfmm}
 lfmm_results$evaluation %>%
   reactable()
+```
 
+#### Best by variable
+```{r, eval = run_lfmm, include = run_lfmm}
 lfmm_results$best_by_variable %>%
   reactable()
 ```
@@ -374,13 +385,18 @@ rda_files <- file.path(
     "rda_best_strategy_by_var.csv")
 )
 
+# Use LD-pruned genotype data for RDA
+if (!exists("ld_prefix")) {
+  ld_prefix <- config$qc_outputs$ld_prefix
+}
+
 if (!config$run$overwrite && all(file.exists(rda_files))) {
   message("Reusing existing RDA results.")
   rda_results <- load_rda_results(config)
 } else {
   # Creates genotype matrix for RDA
   qc_obj <- plink_to_bigSNP(
-    bed_file = paste0(qc_prefix, ".bed"),
+    bed_file = paste0(ld_prefix, ".bed"),
     overwrite = config$run$overwrite
   )
   
@@ -397,14 +413,20 @@ if (!config$run$overwrite && all(file.exists(rda_files))) {
     climate_data = climate_data,
     phenotypes = config$env$vars
 )
+  rm(qc_obj, G_qc, map_qc, fam_qc)
+  gc()
 }
 ```
 
 ### Results
+#### Evaluation
 ```{r, eval = run_rda, include = run_rda}
 rda_results$evaluation %>%
   reactable()
+```
 
+#### Best by variable
+```{r, eval = run_rda, include = run_rda}
 rda_results$best_by_variable %>%
   reactable()
 ```
@@ -534,6 +556,7 @@ if (!config$run$overwrite && ld_block_files_exist(config, phenotypes = config$en
   )
 }
 ```
+
 ## Results
 ```{r, eval = run_consensus_ld, include = run_consensus_ld}
 ld_results$summary %>%
@@ -547,18 +570,24 @@ robustness_results <- run_consensus_robustness(
   ld_results = ld_results,
   output_dir = config$consensus_robustness$output_dir
 )
+```
 
-# Evaluation results
+## Evaluation Results
+```{r, eval = run_consensus_r, include = run_consensus_r}
 robustness_results$evaluation %>%
   dplyr::select(-lead_snp_signature) %>%
   reactable()
+```
 
-# Selected primary sets evaluation summary
+## Selected Primary Sets Evaluation Summary
+```{r, eval = run_consensus_r, include = run_consensus_r}
 robustness_results$primary_summary %>%
   dplyr::select(-lead_snp_signature) %>%
   reactable()
+```
 
-# Primary lead SNPs from primary consensus sets for all variables
+## Primary Lead SNPs (All Variables)
+```{r, eval = run_consensus_r, include = run_consensus_r}
 robustness_results$primary_lead_snps %>%
   reactable()
 ```
@@ -616,7 +645,8 @@ biointerp_df <- run_biointerpretation_workflow(
 )
 ```
 
-```{r}
+## Results
+```{r, eval = run_bio_interp, include = run_bio_interp}
 biointerp_df %>%
   reactable(
     searchable = TRUE,
@@ -626,7 +656,10 @@ biointerp_df %>%
       format = colFormat(digits = 3)
     )
   )
+```
 
+## Candidate Gene Summary
+```{r, eval = run_bio_interp, include = run_bio_interp}
 candidate_gene_summary <- summarize_candidate_genes(biointerp_df)
   
 candidate_gene_summary %>% 
@@ -639,5 +672,3 @@ candidate_gene_summary %>%
     )
   )
 ```
-
-
