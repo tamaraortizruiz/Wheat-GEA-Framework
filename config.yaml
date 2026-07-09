@@ -2,7 +2,7 @@ project:
   name: "Bread Wheat GEA Pipeline"
   
 run:
-  overwrite: true # if TRUE, deletes all existing files and reruns the pipeline from scratch
+  overwrite: false # if TRUE, deletes all existing files and reruns the pipeline from scratch
 
 plink:
   path: "/Users/tamaraortiz/plink_mac_20250819/plink" # Local PLINK path
@@ -144,4 +144,4 @@ biological_interpretation:
   flank_bp: 10000
   use_biomart: true
   tf_annotation_file: "RawData/wheatpro_TFlist_GRN.csv" # Optional user-defined TF annotation file
-  
+

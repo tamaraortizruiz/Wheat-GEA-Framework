@@ -53,6 +53,7 @@ RawData/*
 *.RDataTmp4
 *.RDataTmp5
 *.RDataTmp6
+*.RDataTmp7
 
 # R Markdown render folders
 Pipeline_files/

@@ -1,3 +1,5 @@
+# ---- Redundancy Analysis ----
+
 # prepare_rda_inputs()
 # Prepares genotype, marker, sample, environmental, and PCA covariate data for RDA analysis
 # geno = Genotype matrix with samples as rows and SNPs as columns

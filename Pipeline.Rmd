@@ -3,7 +3,7 @@ title: "`r yaml::read_yaml('config.yaml')$project$name`"
 output:
   html_document:
     toc: true
-    toc_depth: 3
+    toc_depth: 4
     toc_float: true
     self_contained: true
 ---
@@ -180,7 +180,7 @@ qc_plots <- plot_genotype_qc_overview(
 )
 
 qc_plots$marker_summary %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 
 qc_plots$marker_count_plot
 
@@ -257,7 +257,7 @@ kinship_stats <- summarize_gemma_kinship(gemma_kinship_file)
 
 kinship_stats %>%
   mutate(value = round(value, 4)) %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 # GEA
@@ -290,13 +290,13 @@ if (!config$run$overwrite && all(file.exists(gemma_files))) {
 #### Evaluation
 ```{r, eval = run_lmm, include = run_lmm}
 gemma_results$evaluation %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 #### Best by variable
 ```{r, eval = run_lmm, include = run_lmm}
 gemma_results$best_by_variable %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 ### QQ Plots
@@ -354,13 +354,13 @@ if (!config$run$overwrite && all(file.exists(lfmm_files))) {
 #### Evaluation
 ```{r, eval = run_lfmm, include = run_lfmm}
 lfmm_results$evaluation %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 #### Best by variable
 ```{r, eval = run_lfmm, include = run_lfmm}
 lfmm_results$best_by_variable %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 ### QQ Plots
@@ -422,13 +422,13 @@ if (!config$run$overwrite && all(file.exists(rda_files))) {
 #### Evaluation
 ```{r, eval = run_rda, include = run_rda}
 rda_results$evaluation %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 #### Best by variable
 ```{r, eval = run_rda, include = run_rda}
 rda_results$best_by_variable %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 ### QQ Plots
@@ -469,10 +469,10 @@ if (!config$run$overwrite &&
 ### Results
 ```{r, eval = run_pcadapt, include = run_pcadapt}
 pcadapt_results$evaluation %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 
 pcadapt_results$best_evaluation %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 ### QQ Plot
@@ -509,7 +509,7 @@ if (!config$run$overwrite && consensus_files_exist(config, phenotypes = config$e
 ```{r, eval = run_consensus, include = run_consensus}
 # Consensus set evaluation
 consensus_results$evaluation %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 
 # Consensus sets for each variable
 consensus_sets <- tagList(
@@ -560,7 +560,7 @@ if (!config$run$overwrite && ld_block_files_exist(config, phenotypes = config$en
 ## Results
 ```{r, eval = run_consensus_ld, include = run_consensus_ld}
 ld_results$summary %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 # Robustness Evaluation
@@ -576,20 +576,20 @@ robustness_results <- run_consensus_robustness(
 ```{r, eval = run_consensus_r, include = run_consensus_r}
 robustness_results$evaluation %>%
   dplyr::select(-lead_snp_signature) %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 ## Selected Primary Sets Evaluation Summary
 ```{r, eval = run_consensus_r, include = run_consensus_r}
 robustness_results$primary_summary %>%
   dplyr::select(-lead_snp_signature) %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 ## Primary Lead SNPs (All Variables)
 ```{r, eval = run_consensus_r, include = run_consensus_r}
 robustness_results$primary_lead_snps %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 # Adaptive Scoring
@@ -612,7 +612,7 @@ adaptive_results <- run_adaptive_germplasm_scoring(
 ```{r, eval = run_adaptive_scoring, include = run_adaptive_scoring, results='asis'}
 # Adaptive score summary
 adaptive_results$adaptive_score_summary %>%
-  reactable()
+  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 
 # Adaptive scores for each variable
 adaptive_scores <- adaptive_results$adaptive_scores
@@ -627,6 +627,8 @@ for (phenotype_name in unique(adaptive_scores$phenotype)) {
     tagList(
       reactable(
         table_data,
+        sortable = TRUE,
+        filterable = TRUE,
         searchable = TRUE,
         pagination = TRUE,
         defaultPageSize = 10
@@ -649,6 +651,8 @@ biointerp_df <- run_biointerpretation_workflow(
 ```{r, eval = run_bio_interp, include = run_bio_interp}
 biointerp_df %>%
   reactable(
+    sortable = TRUE,
+    filterable = TRUE,
     searchable = TRUE,
     pagination = TRUE,
     defaultPageSize = 10,
@@ -664,6 +668,8 @@ candidate_gene_summary <- summarize_candidate_genes(biointerp_df)
   
 candidate_gene_summary %>% 
   reactable(
+    sortable = TRUE,
+    filterable = TRUE,
     searchable = TRUE,
     pagination = TRUE,
     defaultPageSize = 10,

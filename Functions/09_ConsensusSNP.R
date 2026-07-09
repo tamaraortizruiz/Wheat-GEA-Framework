@@ -50,28 +50,39 @@ standardize_consensus_results <- function(
     return(empty_out)
   }
   
-  if (!"chr" %in% colnames(results)) {
-    results <- results %>%
-      mutate(chr = NA_character_)
+  # Check marker map data
+  pick_col <- function(df, candidates) {
+    hit <- candidates[candidates %in% names(df)]
+    if (length(hit) == 0) NA_character_ else hit[1]
   }
   
-  if (!"position" %in% colnames(results)) {
-    results <- results %>%
-      mutate(position = NA_real_)
+  marker_col <- pick_col(results, c("marker", "rs", "marker.ID"))
+  chr_col <- pick_col(results, c("chr", "chromosome"))
+  pos_col <- pick_col(results, c("position", "ps", "physical.pos"))
+  
+  if (is.na(marker_col)) {
+    stop("No marker column found for ", method_name)
   }
   
   results %>%
     transmute(
       method = method_name,
       phenotype = ifelse(is.null(phenotype_name), NA_character_, phenotype_name),
-      marker = as.character(marker),
-      chr = as.character(chr),
-      position = as.numeric(position),
+      marker = as.character(.data[[marker_col]]),
+      chr = if (!is.na(chr_col)) as.character(.data[[chr_col]]) else NA_character_,
+      position = if (!is.na(pos_col)) as.numeric(.data[[pos_col]]) else NA_real_,
       p_value = as.numeric(p_value),
       q_value = as.numeric(q_value)
     ) %>%
-    filter(!is.na(marker), marker != "", !is.na(p_value), p_value > 0, p_value <= 1, !is.na(q_value), q_value <= q_threshold) %>%
-    # Keeps all distinct marker method combinations
+    filter(
+      !is.na(marker),
+      marker != "",
+      !is.na(p_value),
+      p_value > 0,
+      p_value <= 1,
+      !is.na(q_value),
+      q_value <= q_threshold
+    ) %>%
     distinct(method, marker, .keep_all = TRUE)
 }
 
