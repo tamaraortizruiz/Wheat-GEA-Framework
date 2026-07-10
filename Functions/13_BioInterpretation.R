@@ -450,9 +450,23 @@ annotate_candidate_genes <- function(
   
   annotated_genes <- mapped_candidate_genes
   
-  # BioMart annotation
   if (isTRUE(use_biomart)) {
-    annotated_genes <- add_biomart_annotation(annotated_genes)
+    annotated_genes <- tryCatch(
+      {
+        add_biomart_annotation(annotated_genes)
+      },
+      error = function(e) {
+        warning(
+          "BioMart timed out. Continuing without BioMart annotation. Error: ",
+          conditionMessage(e)
+        )
+        annotated_genes %>%
+          mutate(
+            gene_biotype = NA_character_,
+            biomart_status = "biomart_failed"
+          )
+      }
+    )
   }
   
   if (!"gene_biotype" %in% names(annotated_genes)) {
