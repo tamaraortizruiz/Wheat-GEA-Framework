@@ -592,6 +592,7 @@ robustness_results$primary_lead_snps %>%
   reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
+
 # Adaptive Scoring
 ```{r, eval = run_adaptive_scoring, include = run_adaptive_scoring}
 # Calculate adaptive score (for each variable) for all accessions
@@ -636,6 +637,14 @@ for (phenotype_name in unique(adaptive_scores$phenotype)) {
     )
   )
 }
+```
+# Adaptive Candidate Markers: QTL plot
+```{r, eval = run_adaptive_scoring, include = run_adaptive_scoring}
+plot_primary_qtl(
+  primary_lead_snps = robustness_results$primary_lead_snps,
+  bim_file = paste0(qc_prefix, ".bim"),
+  direction_table = adaptive_results$snp_directions
+)
 ```
 
 # Biological Interpretation
