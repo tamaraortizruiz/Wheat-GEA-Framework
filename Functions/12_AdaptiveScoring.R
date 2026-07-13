@@ -144,7 +144,7 @@ infer_adaptive_snp_direction <- function(
 # fam = Sample information
 # direction_table = Output data frame from infer_adaptive_snp_direction()
 # phenotype = Environmental variable
-# Returns: Ranked accessions scores for a single phenotype
+# Returns: Returns directional scores ranging from -1 to +1
 score_accessions_one_variable <- function(
     geno,
     map,
@@ -153,18 +153,21 @@ score_accessions_one_variable <- function(
     phenotype
 ) {
   
+  # Filter direction table
   snp_direction <- direction_table %>%
     filter(
       .data$phenotype == .env$phenotype,
       !is.na(adaptive_direction)
     )
   
-  # Empty direction check
   if (nrow(snp_direction) == 0) {
     return(data.frame())
   }
   
-  marker_index <- match(snp_direction$marker, map$marker.ID)
+  marker_index <- match(
+    snp_direction$marker,
+    map$marker.ID
+  )
   
   keep <- !is.na(marker_index)
   snp_direction <- snp_direction[keep, ]
@@ -184,52 +187,81 @@ score_accessions_one_variable <- function(
   
   colnames(G) <- snp_direction$marker
   
-  # Recode genotype dosage -> higher values = more adaptive dosage
-  adaptive_G <- G
+  # Orient dosage:
+  # 2 = two alleles associated with higher environmental values
+  # 1 = one allele associated with higher environmental values
+  # 0 = no alleles associated with higher environmental values
+  oriented_G <- G
   negative_snps <- snp_direction$adaptive_direction < 0
   
   if (any(negative_snps)) {
-    adaptive_G[, negative_snps] <- 2 - adaptive_G[, negative_snps]
+    oriented_G[, negative_snps] <-
+      2 - oriented_G[, negative_snps]
   }
   
-  n_scored_snps <- rowSums(!is.na(adaptive_G))
-  adaptive_dosage_sum <- rowSums(adaptive_G, na.rm = TRUE)
+  n_total_snps <- ncol(oriented_G)
+  n_scored_snps <- rowSums(!is.na(oriented_G))
+  adaptive_dosage_sum <- rowSums(oriented_G, na.rm = TRUE)
   
+  # Raw score: 0 to 1
   adaptive_score <- ifelse(
-    n_scored_snps > 0, # if there are lead adaptive SNPs
-    # adaptive_score = adaptive_dosage_sum / max_possible_dosage
+    n_scored_snps > 0,
     adaptive_dosage_sum / (2 * n_scored_snps),
-    NA_real_ # no adaptive SNPs
+    NA_real_
+  )
+  
+  # Centered directional score: -1 to +1
+  directional_score <- ifelse(
+    !is.na(adaptive_score),
+    2 * adaptive_score - 1,
+    NA_real_
+  )
+  
+  # Magnitude of directional differentiation: 0 to 1
+  absolute_directional_score <- abs(directional_score)
+  
+  # Label effect direction
+  direction_label <- case_when(
+    directional_score > 0 ~ "higher_environmental_values",
+    directional_score < 0 ~ "lower_environmental_values",
+    !is.na(directional_score) ~ "balanced",
+    TRUE ~ NA_character_
   )
   
   data.frame(
     sample_id = as.character(fam$sample.ID),
     phenotype = phenotype,
     adaptive_score = adaptive_score,
+    directional_score = directional_score,
+    absolute_directional_score = absolute_directional_score,
+    direction_label = direction_label,
+    n_total_snps = n_total_snps,
     n_scored_snps = n_scored_snps,
+    scored_snp_fraction = n_scored_snps / n_total_snps,
     adaptive_dosage_sum = adaptive_dosage_sum,
     max_possible_dosage = 2 * n_scored_snps
   ) %>%
-    arrange(desc(adaptive_score)) %>%
+    arrange(desc(absolute_directional_score)) %>%
     mutate(
-      rank = row_number(),
-      percentile_rank = 100 * percent_rank(adaptive_score)
+      extremeness_rank = row_number(),
+      extremeness_percentile =
+        100 * percent_rank(absolute_directional_score)
     )
 }
 
-
 # run_adaptive_germplasm_scoring()
+# Run accession-level directional germplasm scoring
 # robustness_results = Consensus robustness results
 # gemma_results = GEMMA GEA results
 # rda_results = RDA GEA results
 # lfmm_results = LFMM GEA results
-# qc_prefix = QC filtered PLINK prefix
+# qc_prefix = QC-filtered PLINK prefix
 # metadata = Aligned metadata data frame
 # output_dir = Adaptive scoring output directory
 # sample_col = Sample identifier column in metadata
-# overwrite = defaults to FALSE, uses existing results
-# Returns: List of marker effect direction table, direction summary, sample adaptive scores,
-#         top 50 adaptive accessions per variable, and adaptive score summary
+# overwrite = Defaults to FALSE; uses existing PLINK conversion
+# Returns: SNP direction table, SNP direction summary, accession directional scores,
+# top 50 directionally extreme accessions per variable, directional score summary
 run_adaptive_germplasm_scoring <- function(
     robustness_results,
     gemma_results,
@@ -242,26 +274,38 @@ run_adaptive_germplasm_scoring <- function(
     overwrite = FALSE
 ) {
   
-  message("\nRunning accession-level adaptive germplasm scoring")
+  message("\nRunning accession-level directional germplasm scoring")
   
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   
+  # Extract selected LD-pruned primary lead SNPs
   primary_lead_snps <- robustness_results$primary_lead_snps
   
-  if (is.null(primary_lead_snps) || nrow(primary_lead_snps) == 0) {
+  if (is.null(primary_lead_snps) || nrow(primary_lead_snps) == 0
+  ) {
     stop("No primary lead SNPs found.")
   }
   
   primary_lead_snps <- primary_lead_snps %>%
-    filter(selected_primary == TRUE, is_lead == TRUE) %>%
-    dplyr::select(phenotype, marker) %>%
+    filter(
+      selected_primary == TRUE,
+      is_lead == TRUE
+    ) %>%
+    dplyr::select(
+      phenotype,
+      marker
+    ) %>%
     mutate(
       phenotype = as.character(phenotype),
       marker = as.character(marker)
     ) %>%
     distinct()
   
-  # SNP effect direction
+  if (nrow(primary_lead_snps) == 0) {
+    stop("No SNPs remained after filtering for selected primary lead SNPs.")
+  }
+  
+  # Direction of each selected SNP
   direction_table <- infer_adaptive_snp_direction(
     primary_lead_snps = primary_lead_snps,
     gemma_results = gemma_results,
@@ -271,12 +315,17 @@ run_adaptive_germplasm_scoring <- function(
   
   write_csv(direction_table, file.path(output_dir, "adaptive_snp_direction_table.csv"))
   
-  # Direction effect summary
+  # Summarize direction sources
   direction_summary <- direction_table %>%
-    count(phenotype, direction_source, name = "n_snps")
+    count(
+      phenotype,
+      direction_source,
+      name = "n_snps"
+    )
   
   write_csv(direction_summary, file.path(output_dir, "adaptive_snp_direction_summary.csv"))
   
+  # Read PLINK genotype data
   qc_obj <- plink_to_bigSNP(
     bed_file = paste0(qc_prefix, ".bed"),
     overwrite = overwrite
@@ -286,80 +335,131 @@ run_adaptive_germplasm_scoring <- function(
   map <- qc_obj$map
   fam <- qc_obj$fam
   
+  # Score accessions separately for each environmental variable
   score_list <- list()
-  
-  for (selected_phenotype in unique(primary_lead_snps$phenotype)) {
-    score_list[[selected_phenotype]] <- score_accessions_one_variable(
-      geno = geno,
-      map = map,
-      fam = fam,
-      direction_table = direction_table,
-      phenotype = selected_phenotype
-    )
+  for (
+    selected_phenotype in
+    unique(primary_lead_snps$phenotype)
+  ) {
+    score_list[[selected_phenotype]] <-
+      score_accessions_one_variable(
+        geno = geno,
+        map = map,
+        fam = fam,
+        direction_table = direction_table,
+        phenotype = selected_phenotype
+      )
   }
   
   adaptive_scores <- bind_rows(score_list)
   
   if (nrow(adaptive_scores) == 0) {
-    warning("No adaptive scores were calculated.")
-    return(list(
-      snp_directions = direction_table,
-      direction_summary = direction_summary,
-      adaptive_scores = adaptive_scores
-    ))
+    warning("No directional scores were calculated")
+    return(
+      list(
+        snp_directions = direction_table,
+        direction_summary = direction_summary,
+        adaptive_scores = adaptive_scores
+      )
+    )
   }
   
-  message("\n A high adaptive score means the accession carries many copies of alleles associated with higher values of the environmental variable
-  \nA low adaptive score means the accession carries fewer copies of those alleles, or more copies of alleles associated with the opposite end of the environmental gradient")
+  message(
+    "\nDirectional score interpretation:",
+    "\n  -1 = strong enrichment for alleles associated with lower",
+    " environmental values",
+    "\n   0 = balanced or intermediate allele dosage",
+    "\n  +1 = strong enrichment for alleles associated with higher",
+    " environmental values",
+    "\n",
+    "\nSign indicates direction.",
+    "\nAbsolute value indicates the strength of the directional",
+    " genetic profile.",
+    "\nAccessions are ranked using the absolute directional score.",
+    "\nThese scores represent genotype-environment associations,",
+    " not direct measures of fitness or yield."
+  )
   
-  # Produce adaptive scores for each accessions (ranked order)
+  # Add accession metadata and rank by directional extremeness
   adaptive_scores <- adaptive_scores %>%
-    left_join(
-      metadata,
-      by = setNames(sample_col, "sample_id")
-    ) %>%
+    left_join(metadata, by = setNames(sample_col, "sample_id")) %>%
     group_by(phenotype) %>%
-    arrange(desc(adaptive_score), .by_group = TRUE) %>%
+    arrange(desc(absolute_directional_score), .by_group = TRUE
+    ) %>%
     mutate(
-      rank = row_number(),
-      percentile_rank = 100 * percent_rank(adaptive_score)
+      extremeness_rank = row_number(),
+      extremeness_percentile =
+        100 * percent_rank(
+          absolute_directional_score
+        )
     ) %>%
     ungroup()
   
-  # Extract top 50 ranked accessions (per variable)
-  top_50_adaptive_accessions <- adaptive_scores %>%
+  # Extract the 50 strongest directional profiles
+  top_50_extreme_accessions <- adaptive_scores %>%
     group_by(phenotype) %>%
     slice_max(
-      order_by = adaptive_score,
+      order_by = absolute_directional_score,
+      n = 50,
+      with_ties = FALSE
+    ) %>%
+    arrange(
+      phenotype,
+      desc(absolute_directional_score)
+    ) %>%
+    ungroup()
+  
+  # Extract high values direction
+  top_50_higher_direction <- adaptive_scores %>%
+    group_by(phenotype) %>%
+    slice_max(
+      order_by = directional_score,
       n = 50,
       with_ties = FALSE
     ) %>%
     ungroup()
   
-  # Produce adaptive score summary
-  adaptive_score_summary <- adaptive_scores %>%
+  # Extract low values direction
+  top_50_lower_direction <- adaptive_scores %>%
+    group_by(phenotype) %>%
+    slice_min(
+      order_by = directional_score,
+      n = 50,
+      with_ties = FALSE
+    ) %>%
+    ungroup()
+  
+  # directional score summary
+  directional_score_summary <- adaptive_scores %>%
     group_by(phenotype) %>%
     summarise(
       n_accessions = n(),
-      n_scored_snps_min = min(n_scored_snps, na.rm = TRUE),
-      n_scored_snps_median = median(n_scored_snps, na.rm = TRUE),
-      n_scored_snps_max = max(n_scored_snps, na.rm = TRUE),
-      adaptive_score_min = min(adaptive_score, na.rm = TRUE),
-      adaptive_score_mean = mean(adaptive_score, na.rm = TRUE),
-      adaptive_score_median = median(adaptive_score, na.rm = TRUE),
-      adaptive_score_max = max(adaptive_score, na.rm = TRUE),
+      n_selected_snps = max(n_total_snps, na.rm = TRUE),
+      median_scored_snp_fraction = median(scored_snp_fraction, na.rm = TRUE),
+      directional_score_min = min(directional_score, na.rm = TRUE),
+      directional_score_median = median(directional_score, na.rm = TRUE),
+      directional_score_max = max(directional_score, na.rm = TRUE),
       .groups = "drop"
     )
   
-  write_csv(adaptive_scores, file.path(output_dir, "accession_adaptive_scores.csv"))
-  write_csv(top_50_adaptive_accessions, file.path(output_dir, "top_50_adaptive_accessions_by_variable.csv"))
-  write_csv(adaptive_score_summary, file.path(output_dir, "adaptive_score_summary_by_variable.csv"))
+  # Save output tables
+  write_csv(adaptive_scores, file.path(output_dir, "accession_directional_scores.csv"))
+  write_csv(top_50_extreme_accessions,file.path(output_dir, paste0("top_50_directionally_extreme_",
+                                                                   "accessions_by_variable.csv")))
+  write_csv(top_50_higher_direction, file.path(output_dir, 
+                                               "top_50_higher_direction_accessions_by_variable.csv"))
+  write_csv(top_50_lower_direction, file.path(output_dir, "top_50_lower_direction_accessions_by_variable.csv"))
+  write_csv(directional_score_summary, file.path(output_dir, "directional_score_summary_by_variable.csv"))
   
+  # Return all output objects
   list(
     snp_directions = direction_table,
     direction_summary = direction_summary,
     adaptive_scores = adaptive_scores,
-    top_50_adaptive_accessions = top_50_adaptive_accessions,
-    adaptive_score_summary = adaptive_score_summary
+    top_50_extreme_accessions = top_50_extreme_accessions,
+    top_50_higher_direction = top_50_higher_direction,
+    top_50_lower_direction = top_50_lower_direction,
+    directional_score_summary = directional_score_summary
   )
 }
+

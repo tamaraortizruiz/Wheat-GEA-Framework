@@ -612,17 +612,25 @@ adaptive_results <- run_adaptive_germplasm_scoring(
 ## Results
 ```{r, eval = run_adaptive_scoring, include = run_adaptive_scoring, results='asis'}
 # Adaptive score summary
-adaptive_results$adaptive_score_summary %>%
-  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
+adaptive_results$directional_score_summary %>%
+  reactable(
+    sortable = TRUE,
+    filterable = TRUE,
+    searchable = TRUE
+  )
 
-# Adaptive scores for each variable
-adaptive_scores <- adaptive_results$adaptive_scores
-for (phenotype_name in unique(adaptive_scores$phenotype)) {
-  cat("\n\n## Top adaptive accessions:", phenotype_name, "\n\n")
+# Top directionally extreme accessions for each variable
+top_accessions <- adaptive_results$top_50_extreme_accessions
+for (phenotype_name in unique(top_accessions$phenotype)) {
+  cat(
+    "\n\n## Top directionally extreme accessions:",
+    phenotype_name,
+    "\n\n"
+  )
   
-  table_data <- adaptive_scores %>%
+  table_data <- top_accessions %>%
     filter(phenotype == phenotype_name) %>%
-    arrange(desc(adaptive_score))
+    arrange(desc(absolute_directional_score))
   
   print(
     tagList(
@@ -633,7 +641,7 @@ for (phenotype_name in unique(adaptive_scores$phenotype)) {
         searchable = TRUE,
         pagination = TRUE,
         defaultPageSize = 10
-        )
+      )
     )
   )
 }
