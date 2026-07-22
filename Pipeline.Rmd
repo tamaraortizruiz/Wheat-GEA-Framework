@@ -173,6 +173,13 @@ if (!exists("qc_prefix")) {
 ```
 
 ```{r}
+dimensions <- count_plink_dataset(
+  qc_prefix
+)
+
+dimensions %>%
+  reactable()
+
 qc_plots <- plot_genotype_qc_overview(
   prefix = qc_prefix,
   output_dir = "Output/QC",
@@ -695,3 +702,4 @@ candidate_gene_summary %>%
     )
   )
 ```
+
