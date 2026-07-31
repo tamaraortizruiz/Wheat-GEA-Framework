@@ -64,7 +64,8 @@ run_pcadapt_single <- function(
   
   model <- pcadapt(
     input = bed,
-    K = K
+    K = K,
+    min.maf = config$qc$maf
   )
   
   p_values <- model$pvalues
