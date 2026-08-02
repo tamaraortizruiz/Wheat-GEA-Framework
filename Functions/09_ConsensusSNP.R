@@ -105,6 +105,8 @@ prepare_consensus_inputs <- function(
     q_threshold = 0.1
 ) {
   
+  target_phenotype <- as.character(phenotype)
+  
   # Best GEA method results
   gemma_best <- gemma_results$results %>%
     inner_join(gemma_results$best_by_variable %>% dplyr::select(phenotype, strategy),
@@ -120,19 +122,19 @@ prepare_consensus_inputs <- function(
   gemma <- standardize_consensus_results(
     gemma_best,
     "GEMMA",
-    phenotype,
+    phenotype_name = target_phenotype,
     q_threshold = q_threshold
     )
   lfmm  <- standardize_consensus_results(
     lfmm_best,
     "LFMM",
-    phenotype,
+    phenotype_name = target_phenotype,
     q_threshold = q_threshold
     )
   rda   <- standardize_consensus_results(
     rda_best,
     "RDA",
-    phenotype,
+    phenotype_name = target_phenotype,
     q_threshold = q_threshold
     )
   pcadapt <- standardize_consensus_results(
@@ -140,12 +142,17 @@ prepare_consensus_inputs <- function(
     "pcadapt",
     phenotype_name = NULL,
     q_threshold = q_threshold
-    ) %>%
+  ) %>%
     mutate(
-      phenotype = phenotype
-      )
+      phenotype = .env$target_phenotype
+    )
   
-  bind_rows(gemma, lfmm, rda, pcadapt)
+  bind_rows(gemma, lfmm, rda, pcadapt) %>%
+    mutate(
+      phenotype = as.character(phenotype),
+      marker = trimws(as.character(marker)),
+      method = trimws(as.character(method))
+    )
 }
 
 # build_consensus_categories()

@@ -31,6 +31,8 @@ This project implements a modular workflow for identifying genomic variants asso
 
 9.  Accession-level adaptive germplasm scoring
 
+10. SNP-to-gene mapping for biological interpretation
+
 ## Project Structure
 
 ``` text

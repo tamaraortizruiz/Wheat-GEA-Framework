@@ -2,7 +2,7 @@ project:
   name: "Bread Wheat GEA Pipeline"
   
 run:
-  overwrite: false # if TRUE, deletes all existing files and reruns the pipeline from scratch
+  overwrite: true # if TRUE, deletes all existing files and reruns the pipeline from scratch
 
 plink:
   path: "/Users/tamaraortiz/plink_mac_20250819/plink" # Local PLINK path
