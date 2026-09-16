@@ -155,38 +155,390 @@ prepare_consensus_inputs <- function(
     )
 }
 
+# prepare_snp_overlap_data()
+# Converts standardized significant SNP results into method support
+# consensus_input = Output from prepare_consensus_inputs()
+# Output: One row per phenotype-SNP with TRUE/FALSE membership for each method
+# Note: This function does not construct or label consensus sets
+prepare_snp_overlap_data <- function(consensus_input) {
+  
+  method_names <- c("GEMMA", "LFMM", "RDA", "pcadapt")
+  
+  # Empty output with expected columns
+  if (is.null(consensus_input) || nrow(consensus_input) == 0) {
+    return(data.frame(
+      phenotype = character(),
+      marker = character(),
+      chr = character(),
+      position = numeric(),
+      GEMMA = logical(),
+      LFMM = logical(),
+      RDA = logical(),
+      pcadapt = logical(),
+      n_methods = integer(),
+      intersection = character(),
+      stringsAsFactors = FALSE
+    ))
+  }
+  
+  # Keep one chromosome and position per SNP
+  marker_coordinates <- consensus_input %>%
+    group_by(phenotype, marker) %>%
+    summarise(
+      chr = dplyr::first(chr[!is.na(chr) & chr != ""], default = NA_character_),
+      position = dplyr::first(position[!is.na(position)], default = NA_real_),
+      .groups = "drop"
+    )
+  
+  # Convert to binary membership columns
+  overlap_data <- consensus_input %>%
+    filter(method %in% method_names) %>%
+    distinct(phenotype, marker, method) %>%
+    mutate(supported = TRUE) %>%
+    pivot_wider(
+      id_cols = c(phenotype, marker),
+      names_from = method,
+      values_from = supported,
+      values_fill = FALSE
+    )
+  
+  # If method found no significant SNPs
+  for (method_name in method_names) {
+    if (!method_name %in% names(overlap_data)) {
+      overlap_data[[method_name]] <- FALSE
+    }
+  }
+  
+  # Ensure logical values
+  overlap_data <- overlap_data %>%
+    mutate(across(all_of(method_names), ~ tidyr::replace_na(as.logical(.x), FALSE)))
+  
+  # Method combination for each SNP
+  method_matrix <- as.matrix(overlap_data[, method_names, drop = FALSE])
+  overlap_data$n_methods <- rowSums(method_matrix)
+  overlap_data$intersection <- apply(method_matrix, 1, function(supported) {
+      paste(method_names[as.logical(supported)], collapse = " + ")
+    }
+  )
+  
+  overlap_data %>%
+    left_join(marker_coordinates, by = c("phenotype", "marker")
+    ) %>%
+    dplyr::select(
+      phenotype,
+      marker,
+      chr,
+      position,
+      all_of(method_names),
+      n_methods,
+      intersection
+    ) %>%
+    arrange(
+      desc(n_methods),
+      intersection,
+      chr,
+      position
+    ) %>%
+    as.data.frame()
+}
+
+# summarize_snp_intersections()
+# Counts SNPs with each exact method support combination
+# overlap_data = Output from prepare_snp_overlap_data()
+# Output: One row per exact intersection
+summarize_snp_intersections <- function(overlap_data) {
+  
+  method_names <- c("GEMMA", "LFMM", "RDA", "pcadapt")
+  
+  if (is.null(overlap_data) || nrow(overlap_data) == 0) {
+    return(data.frame())
+  }
+  
+  intersection_summary <- overlap_data %>%
+    group_by(
+      phenotype,
+      across(all_of(method_names))
+    ) %>%
+    summarise(
+      n_snps = n(),
+      .groups = "drop"
+    )
+  
+  method_matrix <- as.matrix(intersection_summary[, method_names, drop = FALSE])
+  intersection_summary$n_methods <- rowSums(method_matrix)
+  intersection_summary$intersection <- apply(method_matrix, 1, function(supported) {
+      paste(method_names[as.logical(supported)], collapse = " + ")
+    }
+  )
+  
+  intersection_summary %>%
+    dplyr::select(
+      phenotype,
+      intersection,
+      all_of(method_names),
+      n_methods,
+      n_snps
+    ) %>%
+    arrange(desc(n_methods), desc(n_snps)) %>%
+    as.data.frame()
+}
+
+# plot_snp_overlap()
+# Creates an UpSet plot using ggplot2
+plot_snp_overlap <- function(
+    overlap_data,
+    phenotype
+) {
+  
+  method_names <- c("GEMMA", "LFMM", "RDA", "pcadapt")
+  
+  if (is.null(overlap_data) || nrow(overlap_data) == 0) {
+    return(
+      ggplot() +
+        annotate(
+          "text",
+          x = 0,
+          y = 0,
+          label = paste("No significant SNPs were found for", phenotype),
+          size = 5
+        ) +
+        xlim(-1, 1) +
+        ylim(-1, 1) +
+        theme_void() +
+        labs(title = paste("SNP method support overlap:", phenotype))
+    )
+  }
+  
+  # Exclude only pcadapt
+  plot_data <- overlap_data %>%
+    dplyr::filter(GEMMA | LFMM | RDA)
+  
+  # Count SNPs in every exact method intersection
+  intersection_summary <- summarize_snp_intersections(plot_data)
+  
+  # Order intersections by number of supporting methods and SNP count
+  intersection_order <- intersection_summary %>%
+    arrange(
+      desc(n_methods),
+      desc(n_snps),
+      intersection
+    ) %>%
+    pull(intersection)
+  
+  intersection_summary <- intersection_summary %>%
+    mutate(
+      intersection = factor(intersection, levels = intersection_order)
+    )
+  
+  # Long format for dot matrix
+  matrix_data <- intersection_summary %>%
+    dplyr::select(
+      intersection,
+      all_of(method_names)
+    ) %>%
+    pivot_longer(
+      cols = all_of(method_names),
+      names_to = "method",
+      values_to = "supported"
+    ) %>%
+    mutate(
+      method = factor(method, levels = rev(method_names)),
+      supported = as.logical(supported)
+    )
+  
+  # Data used to connect supported methods within intersections
+  connection_data <- matrix_data %>%
+    dplyr::filter(supported)
+  
+  # Intersection bar chart
+  intersection_bars <- ggplot(intersection_summary,
+                              aes(x = intersection,
+                                  y = n_snps)) +
+    geom_col(width = 0.7, fill = "#2C7FB8") +
+    geom_text(aes(label = n_snps), vjust = -0.3, size = 3.5) +
+    scale_y_continuous(expand = ggplot2::expansion(mult = c(0, 0.12))) +
+    labs(
+      y = "Number of significant SNPs",
+      x = NULL
+    ) +
+    theme_classic() +
+    theme(
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.line.x = element_blank(),
+      plot.margin = margin(t = 5, r = 10, b = 0, l = 10)
+    )
+  
+  # Method-membership matrix
+  intersection_matrix <- ggplot(matrix_data, aes(x = intersection, y = method)) +
+    # Connect supported methods vertically
+    geom_line(data = connection_data, aes(group = intersection), colour = "#252525", linewidth = 0.8) +
+    # Unsupported methods in light grey
+    geom_point(shape = 16, size = 3.5, colour = "#D9D9D9") +
+    # Supported methods in black
+    geom_point(data = connection_data, shape = 16, size = 4, colour = "#252525") +
+    scale_x_discrete(drop = FALSE) +
+    labs(
+      x = "Exact method intersection",
+      y = NULL
+    ) +
+    theme_classic() +
+    theme(
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.line.x = element_blank(),
+      axis.line.y = element_blank(),
+      panel.grid.major.y = element_line(colour = "#EEEEEE", linewidth = 0.4),
+      plot.margin = margin(t = 0, r = 10, b = 5, l = 10)
+    )
+  
+  # Stack and align top and bottom of plot
+  patchwork::wrap_plots(
+    intersection_bars,
+    intersection_matrix,
+    ncol = 1,
+    heights = c(2.3, 1.3)
+  ) +
+    patchwork::plot_annotation(
+      title = paste("SNP-level method support overlap:", phenotype)
+      )
+}
+
+# run_snp_overlap_single_variable()
+# Performs exploratory SNP-level overlap for one environmental variable
+run_snp_overlap_single_variable <- function(
+    gemma_results,
+    lfmm_results,
+    rda_results,
+    pcadapt_results,
+    phenotype,
+    output_dir = "Output/ConsensusSNP/SNPOverlap",
+    q_threshold = 0.1
+) {
+  
+  phenotype_dir <- file.path(output_dir, phenotype)
+  dir.create(phenotype_dir, recursive = TRUE, showWarnings = FALSE)
+  
+  standardized_input <- prepare_consensus_inputs(
+    gemma_results = gemma_results,
+    lfmm_results = lfmm_results,
+    rda_results = rda_results,
+    pcadapt_results = pcadapt_results,
+    phenotype = phenotype,
+    q_threshold = q_threshold
+  )
+  
+  overlap_data <- prepare_snp_overlap_data(standardized_input)
+  
+  intersection_summary <- summarize_snp_intersections(overlap_data)
+  
+  overlap_plot <- plot_snp_overlap(
+    overlap_data = overlap_data,
+    phenotype = phenotype
+  )
+
+  
+  # Save one row per SNP with method membership
+  write_csv(overlap_data, file.path(phenotype_dir, "snp_method_membership.csv"))
+  
+  # Save counts for each exact intersection
+  write_csv(intersection_summary, file.path(phenotype_dir, "snp_intersection_summary.csv"))
+  
+  # Save plot
+  ggsave(
+    filename = file.path(phenotype_dir, "snp_overlap_upset.png"),
+    plot = overlap_plot,
+    width = 11,
+    height = 7,
+    dpi = 300,
+    bg = "white"
+  )
+  
+  list(
+    overlap_data = overlap_data,
+    intersection_summary = intersection_summary,
+    overlap_plot = overlap_plot
+  )
+}
+
+# run_snp_overlap_all_variables()
+# Runs SNP-level overlap for all environmental variables
+# Output: Per-variable tables, plots and combined intersection summary
+run_snp_overlap_all_variables <- function(
+    config,
+    gemma_results,
+    lfmm_results,
+    rda_results,
+    pcadapt_results,
+    phenotypes = config$env$vars,
+    output_dir = "Output/ConsensusSNP/SNPOverlap"
+) {
+  
+  overlap_all <- list()
+  
+  for (phenotype in phenotypes) {
+    overlap_all[[phenotype]] <- run_snp_overlap_single_variable(
+      gemma_results = gemma_results,
+      lfmm_results = lfmm_results,
+      rda_results = rda_results,
+      pcadapt_results = pcadapt_results,
+      phenotype = phenotype,
+      output_dir = output_dir,
+      q_threshold = config$consensus$q_threshold
+    )
+  }
+  
+  combined_intersection_summary <- bind_rows(
+    lapply(overlap_all, function(result) result$intersection_summary
+    )
+  )
+  
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  write_csv(combined_intersection_summary, file.path(output_dir, "all_variables_intersection_summary.csv"))
+  
+  list(
+    by_variable = overlap_all,
+    intersection_summary = combined_intersection_summary
+  )
+}
+
+
 # build_consensus_categories()
-# Builds consensus SNP sets according to method support type
-# broad_2methods = q-significant in at least 2 methods (includes all methods)
-# env_2methods = q-significant in at least 2 environment-specific GEA methods
-# high_confidence = q-significant in at least 2 environmental methods plus pcadapt support
-# Output: List of consensus SNP sets
+# Builds tiered consensus SNP sets according to method support type
+# env_2methods = q-significant in at least 2 environmental GEA methods
+# high_confidence = all 3 environmental methods OR at least 2 environmental
+#                   methods + pcadapt
+# exploratory_support = exactly 1 environmental method + pcadapt
+# Output: Full support summary and fixed consensus evidence sets
 build_consensus_categories <- function(consensus_input) {
   
   env_methods <- c("GEMMA", "LFMM", "RDA")
   
-  # if empty consensus input
+  # Return empty outputs when no candidate SNPs are available
   empty_out <- data.frame()
+  
   if (is.null(consensus_input) || nrow(consensus_input) == 0) {
     return(list(
-      broad_2methods = empty_out,
+      summary = empty_out,
       env_2methods = empty_out,
-      high_confidence = empty_out
+      high_confidence = empty_out,
+      exploratory_support = empty_out
     ))
   }
   
+  # Summarize method support for every phenotype-SNP combination
   consensus_summary <- consensus_input %>%
-    mutate(
+    dplyr::mutate(
       is_env_method = method %in% env_methods,
       is_pcadapt = method == "pcadapt"
     ) %>%
-    group_by(phenotype, marker) %>%
-    summarise(
-      chr = dplyr::first(na.omit(chr), default = NA_character_),
-      position = dplyr::first(na.omit(position), default = NA_real_),
-      n_methods = n_distinct(method),
+    dplyr::group_by(phenotype, marker) %>%
+    dplyr::summarise(
+      chr = dplyr::first(chr[!is.na(chr) & chr != ""], default = NA_character_),
+      position = dplyr::first(position[!is.na(position)], default = NA_real_),
+      n_methods = dplyr::n_distinct(method),
       methods = paste(sort(unique(method)), collapse = ";"),
-      n_env_methods = n_distinct(method[is_env_method]),
+      n_env_methods = dplyr::n_distinct(method[is_env_method]),
       env_methods = paste(sort(unique(method[is_env_method])), collapse = ";"),
       pcadapt_support = any(is_pcadapt),
       min_p = min(p_value, na.rm = TRUE),
@@ -195,37 +547,83 @@ build_consensus_categories <- function(consensus_input) {
       min_env_q = ifelse(any(is_env_method), min(q_value[is_env_method], na.rm = TRUE), NA_real_),
       .groups = "drop"
     ) %>%
-    mutate(
+    dplyr::mutate(
       min_env_p = ifelse(is.infinite(min_env_p), NA_real_, min_env_p),
       min_env_q = ifelse(is.infinite(min_env_q), NA_real_, min_env_q)
     )
   
-  # Broad 2 method support set
-  broad_2methods <- consensus_summary %>%
-    filter(n_methods >= 2) %>%
-    mutate(consensus_set = "broad_2methods") %>%
-    arrange(desc(n_methods), min_q, min_p) %>%
-    as.data.frame()
-  
-  # Environmental method support set
+  # Environmental consensus
+  # SNPs supported by at least 2 environmental methods
   env_2methods <- consensus_summary %>%
-    filter(n_env_methods >= 2) %>%
-    mutate(consensus_set = "env_2methods") %>%
-    arrange(desc(n_env_methods), min_env_q, min_env_p) %>%
+    dplyr::filter(
+      n_env_methods >= 2
+    ) %>%
+    dplyr::mutate(
+      consensus_set = "env_2methods"
+    ) %>%
+    dplyr::arrange(
+      dplyr::desc(n_env_methods),
+      dplyr::desc(pcadapt_support),
+      min_env_q,
+      min_env_p
+    ) %>%
     as.data.frame()
   
-  # Environmental + pcadapt method support set
+  # High-confidence subset
+  # All 3 environmental methods OR at least 2 environmental methods + pcadapt
   high_confidence <- consensus_summary %>%
-    filter(n_env_methods >= 2, pcadapt_support) %>%
-    mutate(consensus_set = "high_confidence") %>%
-    arrange(desc(n_env_methods), min_env_q, min_env_p) %>%
+    dplyr::filter(
+      n_env_methods >= 3 | (n_env_methods >= 2 & pcadapt_support)
+    ) %>%
+    dplyr::mutate(
+      consensus_set = "high_confidence"
+    ) %>%
+    dplyr::arrange(
+      dplyr::desc(n_env_methods),
+      min_env_q,
+      min_env_p
+    ) %>%
+    as.data.frame()
+  
+  # Exploratory complementary support
+  # Exactly 1 environmental method + pcadapt
+  exploratory_support <- consensus_summary %>%
+    dplyr::filter(
+      n_env_methods == 1,
+      pcadapt_support
+    ) %>%
+    dplyr::mutate(
+      consensus_set = "exploratory_support"
+    ) %>%
+    dplyr::arrange(
+      min_env_q,
+      min_env_p
+    ) %>%
     as.data.frame()
   
   list(
-    broad_2methods = broad_2methods,
+    summary = as.data.frame(consensus_summary),
     env_2methods = env_2methods,
-    high_confidence = high_confidence
+    high_confidence = high_confidence,
+    exploratory_support = exploratory_support
   )
+}
+
+# validate_primary_set()
+# Validates the configured name of the primary consensus set
+# primary_set = "env_2methods" (default) or "high_confidence"
+# Returns: Validated primary set name
+validate_primary_set <- function(
+    primary_set = "env_2methods"
+) {
+
+  allowed_primary_sets <- c("env_2methods", "high_confidence")
+
+  if (length(primary_set) != 1 || is.na(primary_set) || !primary_set %in% allowed_primary_sets) {
+    stop("Primary set must be one of: ", paste(allowed_primary_sets, collapse = ", "))
+  }
+
+  primary_set
 }
 
 # evaluate_consensus_set()
@@ -233,7 +631,7 @@ build_consensus_categories <- function(consensus_input) {
 # consensus_df = Consensus SNP table
 # consensus_name = Name of consensus set
 # phenotype = Environmental variable
-# Output: Singlerow summary data frame
+# Output: Single row summary data frame
 evaluate_consensus_set <- function(
     consensus_df,
     consensus_name,
@@ -250,7 +648,8 @@ evaluate_consensus_set <- function(
       median_methods = NA_real_,
       max_methods = NA_real_,
       mean_env_methods = NA_real_,
-      pcadapt_supported_snps = 0
+      pcadapt_supported_snps = 0,
+      median_qval = NA_real_
     ))
   }
   
@@ -268,8 +667,7 @@ evaluate_consensus_set <- function(
   )
 }
 
-# run_consensus_single_variable(gemma_results, lfmm_results, rda_results, pcadapt_results
-# phenotype, output_dir, q_threshold)
+# run_consensus_single_variable()
 # Builds consensus SNP sets for a single environmental variable
 # gemma_results = GEMMA result object
 # lfmm_results = LFMM result object
@@ -278,6 +676,7 @@ evaluate_consensus_set <- function(
 # phenotype = Environmental variable
 # output_dir = Consensus output directory
 # q_threshold = q-value threshold for candidate SNP inclusion
+# primary_set = Evidence set used as primary consensus; defaults to env_2methods
 # Output: Consensus SNP sets and evaluation table saved as CSV
 run_consensus_single_variable <- function(
     gemma_results,
@@ -286,7 +685,8 @@ run_consensus_single_variable <- function(
     pcadapt_results,
     phenotype,
     output_dir = "Output/ConsensusSNP",
-    q_threshold = 0.1
+    q_threshold = 0.1,
+    primary_set = "env_2methods"
 ) {
   
   message("\nBuilding consensus sets for: ", phenotype)
@@ -304,13 +704,9 @@ run_consensus_single_variable <- function(
   )
   
   consensus_sets <- build_consensus_categories(consensus_input)
+  primary_set <- validate_primary_set(primary_set)
   
   evaluation <- bind_rows(
-    evaluate_consensus_set(
-      consensus_sets$broad_2methods,
-      "broad_2methods",
-      phenotype
-    ),
     evaluate_consensus_set(
       consensus_sets$env_2methods,
       "env_2methods",
@@ -320,20 +716,30 @@ run_consensus_single_variable <- function(
       consensus_sets$high_confidence,
       "high_confidence",
       phenotype
+    ),
+    evaluate_consensus_set(
+      consensus_sets$exploratory_support,
+      "exploratory_support",
+      phenotype
     )
-  )
-  
+  ) %>%
+    dplyr::mutate(
+      selected_as_primary = consensus_set == primary_set
+    )
+
   write_csv(consensus_input, file.path(phenotype_dir, "consensus_input.csv"))
-  write_csv(consensus_sets$broad_2methods, file.path(phenotype_dir, "broad_2methods.csv"))
+  write_csv(consensus_sets$summary, file.path(phenotype_dir, "consensus_support_summary.csv"))
   write_csv(consensus_sets$env_2methods, file.path(phenotype_dir, "env_2methods.csv"))
   write_csv(consensus_sets$high_confidence, file.path(phenotype_dir, "high_confidence.csv"))
+  write_csv(consensus_sets$exploratory_support, file.path(phenotype_dir, "exploratory_support.csv"))
   write_csv(evaluation, file.path(phenotype_dir, "consensus_evaluation.csv"))
   
   list(
     input = consensus_input,
-    broad_2methods = consensus_sets$broad_2methods,
+    summary = consensus_sets$summary,
     env_2methods = consensus_sets$env_2methods,
     high_confidence = consensus_sets$high_confidence,
+    exploratory_support = consensus_sets$exploratory_support,
     evaluation = evaluation
   )
 }
@@ -357,6 +763,17 @@ run_consensus_all_variables <- function(
 ) {
   
   consensus_all <- list()
+
+  # Default to the inclusive environmental consensus when YAML omits the key
+  primary_set <- config$consensus$primary_set
+  
+  if (is.null(primary_set) || length(primary_set) == 0 ||
+    (length(primary_set) == 1 && (is.na(primary_set) || primary_set == ""))
+  ) {
+    primary_set <- "env_2methods"
+  }
+  
+  primary_set <- validate_primary_set(primary_set)
   
   # For each environmental variable
   for (phenotype in phenotypes) {
@@ -367,7 +784,8 @@ run_consensus_all_variables <- function(
       pcadapt_results = pcadapt_results,
       phenotype = phenotype,
       output_dir = config$consensus$output_dir,
-      q_threshold = config$consensus$q_threshold
+      q_threshold = config$consensus$q_threshold,
+      primary_set = primary_set
     )
   }
   
@@ -377,23 +795,9 @@ run_consensus_all_variables <- function(
   
   list(
     by_variable = consensus_all,
+    primary_set = primary_set,
     evaluation = combined_evaluation
   )
-}
-
-# read_csv_safe()
-# Reads .csv file if it exists and is not empty
-# file = .csv file path
-# Output: Data frame
-read_csv_safe <- function(file) {
-  
-  # if file empty
-  if (!file.exists(file) || file.info(file)$size == 0) {
-    return(data.frame())
-  }
-  
-  read_csv(file, show_col_types = FALSE) %>%
-    as.data.frame()
 }
 
 # consensus_files_exist()
@@ -409,8 +813,11 @@ consensus_files_exist <- function(
   required_files <- c(
     file.path(output_dir, "consensus_all_evaluation.csv"),
     unlist(lapply(phenotypes, function(phenotype) {
-      file.path(output_dir, phenotype, c("consensus_input.csv", "broad_2methods.csv",
-                                         "env_2methods.csv", "high_confidence.csv",
+      file.path(output_dir, phenotype, c("consensus_input.csv",
+                                         "consensus_support_summary.csv",
+                                         "env_2methods.csv",
+                                         "high_confidence.csv",
+                                         "exploratory_support.csv",
                                          "consensus_evaluation.csv"))
     }))
   )
@@ -429,37 +836,36 @@ load_consensus_results <- function(
   
   output_dir <- config$consensus$output_dir
   consensus_all <- list()
+
+  primary_set <- config$consensus$primary_set
+  if (
+    is.null(primary_set) ||
+    length(primary_set) == 0 ||
+    (length(primary_set) == 1 && (is.na(primary_set) || primary_set == ""))
+  ) {
+    primary_set <- "env_2methods"
+  }
+  primary_set <- validate_primary_set(primary_set)
   
   for (phenotype in phenotypes) {
     phenotype_dir <- file.path(output_dir, phenotype)
     consensus_all[[phenotype]] <- list(
-      input = read_csv_safe(file.path(phenotype_dir, "consensus_input.csv")),
-      broad_2methods = read_csv_safe(file.path(phenotype_dir, "broad_2methods.csv")),
-      env_2methods = read_csv_safe(file.path(phenotype_dir, "env_2methods.csv")),
-      high_confidence = read_csv_safe(file.path(phenotype_dir, "high_confidence.csv")),
-      evaluation = read_csv_safe(file.path(phenotype_dir, "consensus_evaluation.csv"))
+      input = read.csv(file.path(phenotype_dir, "consensus_input.csv"), check.names = FALSE),
+      summary = read.csv(file.path(phenotype_dir, "consensus_support_summary.csv"), check.names = FALSE),
+      env_2methods = read.csv(file.path(phenotype_dir, "env_2methods.csv"), check.names = FALSE),
+      high_confidence = read.csv(file.path(phenotype_dir, "high_confidence.csv"), check.names = FALSE),
+      exploratory_support = read.csv(file.path(phenotype_dir, "exploratory_support.csv"), check.names = FALSE),
+      evaluation = read.csv(file.path(phenotype_dir, "consensus_evaluation.csv"), check.names = FALSE) %>%
+        dplyr::mutate(selected_as_primary = consensus_set == primary_set)
     )
   }
   
-  combined_evaluation <- read_csv_safe(file.path(output_dir, "consensus_all_evaluation.csv"))
+  combined_evaluation <- read.csv(file.path(output_dir, "consensus_all_evaluation.csv"), check.names = FALSE) %>%
+    dplyr::mutate(selected_as_primary = consensus_set == primary_set)
   
   list(
     by_variable = consensus_all,
+    primary_set = primary_set,
     evaluation = combined_evaluation
   )
-}
-
-# make_reactable()
-# Makes interactive reactable data frame for HTML
-make_reactable <- function(df) {
-  if (is.null(df) || nrow(df) == 0) {
-    tags$p("No SNPs in this consensus set")
-  } else {
-    reactable(
-      df,
-      searchable = TRUE,
-      pagination = TRUE,
-      defaultPageSize = 10
-    )
-  }
 }

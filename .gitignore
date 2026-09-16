@@ -47,15 +47,7 @@ RawData/*
 *.tmp
 *.swp
 *.RDataTmp
-*.RDataTmp1
-*.RDataTmp2
-*.RDataTmp3
-*.RDataTmp4
-*.RDataTmp5
-*.RDataTmp6
-*.RDataTmp7
-*.RDataTmp8
-*.RDataTmp9
+*.RDataTmp*
 
 # R Markdown render folders
 Pipeline_files/

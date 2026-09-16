@@ -6,6 +6,7 @@ cran_packages <- c(
   "bigsnpr",
   "bigstatsr",
   "dplyr",
+  "tidyr",
   "readr",
   "yaml",
   "ggplot2",
@@ -20,7 +21,8 @@ cran_packages <- c(
   "vegan",
   "pcadapt",
   "igraph",
-  "htmltools"
+  "htmltools",
+  "patchwork"
 )
 
 bio_packages <- c(

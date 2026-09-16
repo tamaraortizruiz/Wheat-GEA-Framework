@@ -48,7 +48,7 @@ prepare_pcadapt_inputs <- function(plink_prefix) {
 # output_dir = Directory to write pcadapt outputs
 # q_threshold = FDR threshold for significance
 # Output: SNP-level pcadapt results table and evaluation table saved as .csv
-# Returns: List containing results, evaluation, and fitted pcadapt model
+# Returns: List containing the result file path and evaluation table
 run_pcadapt_single <- function(
     bed,
     map,
@@ -104,13 +104,15 @@ run_pcadapt_single <- function(
     bonferroni_threshold = unique(result$bonferroni_threshold)
   )
   
-  write_csv(result, file.path(output_dir, paste0(output_prefix, "_results.csv")))
-  write_csv(evaluation, file.path(output_dir, paste0(output_prefix, "_evaluation.csv")))
+  result_file <- file.path(output_dir, paste0(output_prefix, "_results.csv"))
+  evaluation_file <- file.path(output_dir, paste0(output_prefix, "_evaluation.csv"))
+  
+  write_csv(result, result_file)
+  write_csv(evaluation, evaluation_file)
   
   list(
-    results = result,
-    evaluation = evaluation,
-    model = model
+    result_file = result_file,
+    evaluation = evaluation
   )
 }
 
@@ -119,8 +121,7 @@ run_pcadapt_single <- function(
 # config = Configuration list loaded from YAML
 # qc_prefix = PLINK dataset prefix after QC and environmental filtering
 # Output: SNP-level pcadapt results and evaluation tables for all K values
-# Returns: List containing combined results, evaluation, best_strategy,
-#          best_results, individual strategy outputs, and fitted models
+# Returns: List containing results, evaluation, and selected strategy summaries
 run_pcadapt_strategies <- function(
     config,
     qc_prefix
@@ -130,9 +131,8 @@ run_pcadapt_strategies <- function(
     plink_prefix = qc_prefix
   )
   
-  all_results <- list()
+  result_files <- character()
   all_eval <- list()
-  all_models <- list()
   
   # for each K in K values to evaluate
   for (K in config$pcadapt$K_values) {
@@ -147,16 +147,23 @@ run_pcadapt_strategies <- function(
       q_threshold = config$pcadapt$q_threshold
     )
     
-    all_results[[strategy]] <- pcadapt_run$results
+    result_files[[strategy]] <- pcadapt_run$result_file
     all_eval[[strategy]] <- pcadapt_run$evaluation
-    all_models[[strategy]] <- pcadapt_run$model
+    
+    rm(pcadapt_run)
+    invisible(gc(verbose = FALSE))
   }
   
-  results_all <- bind_rows(all_results)
+  results_all <- bind_rows(
+    lapply(result_files, function(result_file) {
+      read_csv(result_file, show_col_types = FALSE)
+    })
+  )
+  
   evaluation_all <- bind_rows(all_eval)
   
-  best_strategy <- select_best_strategy(evaluation_all)$strategy[1]
   best_eval <- select_best_strategy(evaluation_all)
+  best_strategy <- best_eval$strategy[[1]]
   
   write_csv(results_all, file.path(config$pcadapt$output_dir, "pcadapt_all_results.csv"))
   write_csv(evaluation_all, file.path(config$pcadapt$output_dir, "pcadapt_all_evaluation.csv"))
@@ -165,11 +172,10 @@ run_pcadapt_strategies <- function(
   list(
     results = results_all,
     evaluation = evaluation_all,
+    best_evaluation = best_eval,
     best_strategy = best_strategy,
-    best_results = results_all %>% filter(strategy == best_strategy),
-    individual = all_results,
-    models = all_models,
-    best_evaluation = best_eval
+    best_results = results_all %>%
+      filter(strategy == best_strategy)
   )
 }
 

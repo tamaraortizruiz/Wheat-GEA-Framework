@@ -402,7 +402,6 @@ plink_to_nummat <- function(
   )
   
   result <- list(
-    obj = obj,
     G = G_matrix,
     map = obj$map,
     fam = obj$fam,

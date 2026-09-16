@@ -2,7 +2,7 @@ project:
   name: "Bread Wheat GEA Pipeline"
   
 run:
-  overwrite: true # if TRUE, deletes all existing files and reruns the pipeline from scratch
+  overwrite: false # if TRUE, deletes all existing files and reruns the pipeline from scratch
 
 plink:
   path: "/Users/tamaraortiz/plink_mac_20250819/plink" # Local PLINK path
@@ -63,12 +63,6 @@ qc:
   geno_na: 0.05
   maf: 0.01
   ind_na: 0.10
-
-# LD pruning for PCA
-ld_pruning:
-  window: 50
-  step: 10
-  r2: 0.2
   
 # Quality control path outputs
 qc_outputs: #DNC
@@ -78,11 +72,23 @@ qc_outputs: #DNC
   ld_prefix: "Data/Wheat_all_qc_ldpruned"
   qc_numeric_matrix: "Data/Wheat_all_qc_climate_numeric_matrix.rds"
   ld_numeric_matrix: "Data/Wheat_all_ld_climate_numeric_matrix.rds"
+  
+# Kinship
+kinship_qc:
+  duplicate_threshold: 0.99
+  diagonal_mad_threshold: 5
+  remove_duplicates: true
+  remove_diagonal_outliers: true
+  
+# LD pruning for PCA
+ld_pruning:
+  window: 50
+  step: 10
+  r2: 0.2
 
 # PCA
 pca:
-  n_pcs: 10
-  ncores: 1
+  n_pcs: 20
   output_file: "Output/Structure/pca_ldpruned.rds" #DNC
   covariates_file: "Output/Structure/pca_covariates.csv" #DNC
 
@@ -132,6 +138,12 @@ ld_pruning_ph:
 # Consensus set robustness evaluation
 consensus_robustness:
   output_dir: "Output/ConsensusRobustness" #DNC
+  
+consensus_bic_evaluation:
+  output_dir: "Output/Consensus_BIC_Evaluation"
+  n_pcs: 5
+  bic_tolerance: 2
+  require_better_than_baseline: true
 
 # Accession-level adaptive scoring
 adaptive_scoring:

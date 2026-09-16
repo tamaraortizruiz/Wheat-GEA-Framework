@@ -177,21 +177,19 @@ score_accessions_one_variable <- function(
     return(data.frame())
   }
   
-  # Genotype dosage matrix filtered to LD-pruned lead SNPs
-  G <- as.matrix(geno[, marker_index])
-  G <- apply(G, 2, as.numeric)
+  # Numeric genotype dosage matrix filtered to lead SNPs
+  oriented_G <- as.matrix(geno[, marker_index])
   
-  if (is.null(dim(G))) {
-    G <- matrix(G, ncol = 1)
+  if (!is.numeric(oriented_G)) {
+    stop("Extracted genotype dosage matrix is not numeric.")
   }
   
-  colnames(G) <- snp_direction$marker
+  colnames(oriented_G) <- snp_direction$marker
   
   # Orient dosage:
   # 2 = two alleles associated with higher environmental values
   # 1 = one allele associated with higher environmental values
   # 0 = no alleles associated with higher environmental values
-  oriented_G <- G
   negative_snps <- snp_direction$adaptive_direction < 0
   
   if (any(negative_snps)) {

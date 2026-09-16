@@ -143,7 +143,7 @@ prepare_gemma_covariates <- function(
 # output_prefix = Prefix for GEMMA output files
 # output_dir = Directory where GEMMA results are written
 # Output: GEMMA association results file (.assoc.txt)
-# Returns: Path to the association results file
+# Returns: List containing the processed result file path and evaluation table
 run_gemma_lmm <- function(
     gemma = "gemma",
     bfile,
@@ -228,9 +228,14 @@ run_gemma_lmm <- function(
     bonferroni_threshold = unique(result$bonferroni_threshold)
   )
   
+  result_file <- file.path(output_dir, paste0(output_prefix, "_results.csv"))
+  evaluation_file <- file.path(output_dir, paste0(output_prefix, "_evaluation.csv"))
+  
+  write_csv(result, result_file)
+  write_csv(evaluation, evaluation_file)
+  
   list(
-    assoc_file = assoc_file,
-    results = result,
+    result_file = result_file,
     evaluation = evaluation
   )
 }
@@ -254,9 +259,21 @@ run_gemma_lmm_strategies <- function(
     q_threshold = config$gemma$q_threshold
 ) {
   
-  all_results <- list()
+  result_files <- character()
   all_eval <- list()
-  all_runs <- list()
+  
+  # GEMMA phenotype file path
+  pheno_file <- file.path(config$gemma$output_dir,
+                          paste0("pheno_", phenotype, ".txt"))
+  
+  # GEMMA phenotype file
+  gemma_pheno <- prepare_gemma_phenotype(
+    climate_data = climate_data,
+    fam_file = paste0(qc_prefix, ".fam"),
+    phenotype = phenotype,
+    sample_col = config$metadata$sample_col,
+    output_file = pheno_file
+  )
   
   # For each structure correction strategy
   for (n_pcs in config$gemma$pc_strategies) {
@@ -267,19 +284,6 @@ run_gemma_lmm_strategies <- function(
     }
     
     message("\nRunning GEMMA strategy: ", strategy)
-    
-    # GEMMA phenotype file path
-    pheno_file <- file.path(config$gemma$output_dir,
-                            paste0("pheno_", phenotype, "_", strategy, ".txt"))
-    
-    # GEMMA phenotype file
-    gemma_pheno <- prepare_gemma_phenotype(
-      climate_data = climate_data,
-      fam_file = paste0(qc_prefix, ".fam"),
-      phenotype = phenotype,
-      sample_col = config$metadata$sample_col,
-      output_file = pheno_file
-    )
     
     # Covariates
     if (n_pcs == 0) {
@@ -307,23 +311,21 @@ run_gemma_lmm_strategies <- function(
       output_dir = config$gemma$output_dir
     )
     
-    all_results[[strategy]] <- gemma_run$results
+    result_files[[strategy]] <- gemma_run$result_file
     all_eval[[strategy]] <- gemma_run$evaluation
-    all_runs[[strategy]] <- gemma_run # all per strategy objects (including association file)
+    
+    rm(gemma_run)
+    invisible(gc(verbose = FALSE))
   }
 
-  results_all <- bind_rows(all_results)
   evaluation_all <- bind_rows(all_eval)
-  best_strategy <- select_best_strategy(evaluation_all)$strategy[1]
+  best_strategy <- select_best_strategy(evaluation_all)$strategy[[1]]
   
-  return(list(
-    results = results_all,
+  list(
+    result_files = unname(result_files),
     evaluation = evaluation_all,
-    best_strategy = best_strategy,
-    best_results = results_all %>% filter(strategy == best_strategy),
-    individual = all_results,
-    runs = all_runs
-  ))
+    best_strategy = best_strategy
+  )
 }
 
 # run_gemma_lmm_all_variables()
@@ -360,7 +362,14 @@ run_gemma_lmm_all_variables <- function(
     )
   }
   
-  combined_results <- bind_rows(lapply(all_gemma, function(x) x$results))
+  result_files <- unlist(lapply(all_gemma, function(x) x$result_files), use.names = FALSE)
+  
+  combined_results <- bind_rows(
+    lapply(result_files, function(result_file) {
+      read_csv(result_file, show_col_types = FALSE)
+    })
+  )
+  
   combined_evaluation <- bind_rows(lapply(all_gemma, function(x) x$evaluation))
   
   best_by_variable <- combined_evaluation %>%
@@ -373,7 +382,6 @@ run_gemma_lmm_all_variables <- function(
   write_csv(best_by_variable, file.path(config$gemma$output_dir, "gemma_best_strategy_by_var.csv"))
   
   return(list(
-    by_variable = all_gemma,
     results = combined_results,
     evaluation = combined_evaluation,
     best_by_variable = best_by_variable

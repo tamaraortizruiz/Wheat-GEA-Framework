@@ -88,7 +88,7 @@ prepare_rda_inputs <- function(
 # output_dir = Directory to write RDA outputs
 # q_threshold = FDR threshold for significance
 # Output: SNP-level RDA results table and model evaluation table saved as .csv
-# Returns: List containing results, evaluation, and fitted RDA model
+# Returns: List containing the result file path and evaluation table
 run_rda_single <- function(
     geno,
     env,
@@ -183,13 +183,15 @@ run_rda_single <- function(
     bonferroni_threshold = unique(result$bonferroni_threshold)
   )
   
-  write_csv(result, file.path(output_dir, paste0(output_prefix, "_results.csv")))
-  write_csv(evaluation, file.path(output_dir, paste0(output_prefix, "_evaluation.csv")))
+  result_file <- file.path(output_dir, paste0(output_prefix, "_results.csv"))
+  evaluation_file <- file.path(output_dir, paste0(output_prefix, "_evaluation.csv"))
+  
+  write_csv(result, result_file)
+  write_csv(evaluation, evaluation_file)
   
   list(
-    results = result,
-    evaluation = evaluation,
-    model = rda_model
+    result_file = result_file,
+    evaluation = evaluation
   )
 }
 
@@ -202,8 +204,7 @@ run_rda_single <- function(
 # climate_data = Environmental data frame
 # phenotype = Climatic variable to analyze
 # Output: Combined SNP-level results and evaluation tables for all strategies
-# Returns: List containing results, evaluation, best_strategy, best_results and
-#          strategy results and models
+# Returns: List containing result file paths, evaluation, and best strategy
 run_rda_strategies <- function(
     config,
     geno,
@@ -213,35 +214,38 @@ run_rda_strategies <- function(
     phenotype
 ) {
   
-  all_results <- list()
+  max_pcs <- max(config$rda$pc_strategies)
+  rda_input <- prepare_rda_inputs(
+    geno = geno,
+    map = map,
+    fam = fam,
+    climate_data = climate_data,
+    phenotype = phenotype,
+    covariates_file = config$pca$covariates_file,
+    n_pcs = max_pcs,
+    sample_col = config$metadata$sample_col
+  )
+  
+  result_files <- character()
   all_eval <- list()
-  all_models <- list()
   
   # For each structure correction strategy (number of PCs)
   for (n_pcs in config$rda$pc_strategies) {
     
     if (n_pcs == 0) {
       strategy <- "no_PCs"
+      strategy_covariates <- NULL
     } else {
       strategy <- paste0(n_pcs, "PCs")
+      pc_cols <- paste0("PC", seq_len(n_pcs))
+      strategy_covariates <- rda_input$covariates[, pc_cols, drop = FALSE]
     }
-    
-    rda_input <- prepare_rda_inputs(
-      geno = geno,
-      map = map,
-      fam = fam,
-      climate_data = climate_data,
-      phenotype = phenotype,
-      covariates_file = config$pca$covariates_file,
-      n_pcs = n_pcs,
-      sample_col = config$metadata$sample_col
-    )
-    
+
     rda_run <- run_rda_single(
       geno = rda_input$geno,
       env = rda_input$env,
       map = rda_input$map,
-      covariates = rda_input$covariates,
+      covariates = strategy_covariates,
       phenotype = phenotype,
       strategy = strategy,
       output_prefix = paste0(phenotype, "_", strategy),
@@ -249,23 +253,21 @@ run_rda_strategies <- function(
       q_threshold = config$rda$q_threshold
     )
     
-    all_results[[strategy]] <- rda_run$results
+    result_files[[strategy]] <- rda_run$result_file
     all_eval[[strategy]] <- rda_run$evaluation
-    all_models[[strategy]] <- rda_run$model
+    
+    # Remove from memory
+    rm(rda_run, strategy_covariates)
+    invisible(gc(verbose = FALSE))
   }
   
-  results_all <- bind_rows(all_results)
   evaluation_all <- bind_rows(all_eval)
-  
-  best_strategy <- select_best_strategy(evaluation_all)$strategy[1]
+  best_strategy <- select_best_strategy(evaluation_all)$strategy[[1]]
   
   list(
-    results = results_all,
+    result_files = unname(result_files),
     evaluation = evaluation_all,
-    best_strategy = best_strategy,
-    best_results = results_all %>% filter(strategy == best_strategy),
-    individual = all_results,
-    models = all_models
+    best_strategy = best_strategy
   )
 }
 
@@ -308,7 +310,14 @@ run_rda_all_variables <- function(
     )
   }
   
-  combined_results <- bind_rows(lapply(rda_all, function(x) x$results))
+  result_files <- unlist(lapply(rda_all, function(x) x$result_files),use.names = FALSE)
+  
+  combined_results <- bind_rows(
+    lapply(result_files, function(result_file) {
+      read_csv(result_file, show_col_types = FALSE)
+    })
+  )
+  
   combined_evaluation <- bind_rows(lapply(rda_all, function(x) x$evaluation))
   
   best_by_variable <- combined_evaluation %>%
@@ -321,7 +330,6 @@ run_rda_all_variables <- function(
   write_csv(best_by_variable, file.path(config$rda$output_dir, "rda_best_strategy_by_var.csv"))
   
   list(
-    by_variable = rda_all,
     results = combined_results,
     evaluation = combined_evaluation,
     best_by_variable = best_by_variable

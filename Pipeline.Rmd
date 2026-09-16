@@ -19,9 +19,9 @@ create_project_dirs(overwrite = config$run$overwrite)
 # Sets status for pipeline modules
 run_env <- isTRUE(config$analysis$run_env)
 run_qc <- isTRUE(config$analysis$run_qc)
+run_kinship <- isTRUE(config$analysis$run_kinship)
 run_ld_pruning <- isTRUE(config$analysis$run_ld_pruning)
 run_pca <- isTRUE(config$analysis$run_pca)
-run_kinship <- isTRUE(config$analysis$run_kinship)
 run_lmm <- isTRUE(config$analysis$run_lmm)
 run_lfmm <- isTRUE(config$analysis$run_lfmm)
 run_rda <- isTRUE(config$analysis$run_rda)
@@ -173,13 +173,6 @@ if (!exists("qc_prefix")) {
 ```
 
 ```{r}
-dimensions <- count_plink_dataset(
-  qc_prefix
-)
-
-dimensions %>%
-  reactable()
-
 qc_plots <- plot_genotype_qc_overview(
   prefix = qc_prefix,
   output_dir = "Output/QC",
@@ -195,7 +188,103 @@ qc_plots$marker_position_plot
 ```
 
 
-# Population Structure & Kinship
+# Kinship
+```{r, eval = run_kinship, include = run_kinship}
+# Creates GEMMA kinship matrix
+gemma_kinship_file <- run_gemma_kinship(
+  gemma = config$gemma$path,
+  bfile = qc_prefix,
+  output_prefix = config$gemma$kinship_prefix,
+  output_dir = config$gemma$output_dir,
+  overwrite = config$run$overwrite
+)
+
+# Calculates kinship statistics
+kinship_stats <- summarize_gemma_kinship(gemma_kinship_file)
+kinship_stats
+```
+
+## Diagnostics
+```{r, eval = run_kinship, include = run_kinship}
+# Calculate kinship diagnostics
+kinship_diag <- diagnose_gemma_kinship(
+  kinship_file = gemma_kinship_file,
+  bfile = qc_prefix,
+  duplicate_threshold = config$kinship_qc$duplicate_threshold,
+  diag_mad_threshold = config$kinship_qc$diagonal_mad_threshold
+)
+
+kinship_diag$summary
+
+# Diagonal plot
+kinship_diag$plots$diagonal
+
+# Off diagonal plot
+kinship_diag$plots$off_diagonal
+
+# Similarity
+kinship_diag$plots$max_similarity
+
+# Duplicate pairs
+kinship_diag$duplicate_pairs
+
+# Diagonal outliers
+subset(kinship_diag$diagonal, flagged)
+```
+
+## Filtering
+```{r, eval = run_kinship, include = run_kinship}
+kinship_filter <- filter_kinship_samples(
+  kin_diag = kinship_diag,
+  qc_prefix = qc_prefix,
+  plink = config$plink$path,
+  remove_duplicates = config$kinship_qc$remove_duplicates,
+  remove_diagonal_outliers = config$kinship_qc$remove_diagonal_outliers
+)
+
+# if samples were removed
+if (kinship_filter$filtered) {
+  # Recalculates kinship for the final QC data
+  gemma_kinship_file <- run_gemma_kinship(
+    gemma = config$gemma$path,
+    bfile = qc_prefix,
+    output_prefix = config$gemma$kinship_prefix,
+    output_dir = config$gemma$output_dir,
+    overwrite = TRUE
+  )
+  
+  kinship_stats <- summarize_gemma_kinship(
+    gemma_kinship_file
+  )
+}
+
+# Match environmental and metadata tables to final QC samples
+final_fam <- read.table(paste0(qc_prefix, ".fam"), stringsAsFactors = FALSE)
+final_ids <- final_fam[, 2]
+sample_col <- config$metadata$sample_col
+
+climate_match <- match(final_ids, climate_data[[sample_col]])
+if (anyNA(climate_match)) {
+  stop("Mismatch between final genotype samples and climate data.")
+}
+climate_data <- climate_data[climate_match, , drop = FALSE]
+
+metadata <- filter_metadata(
+  metadata_file = config$metadata$file,
+  fam_file = paste0(qc_prefix, ".fam"),
+  sample_col = config$metadata$sample_col,
+  output_file = config$metadata$filtered_file
+)
+```
+
+```{r}
+dimensions <- count_plink_dataset(qc_prefix)
+
+dimensions %>%
+  reactable()
+```
+
+# Population Structure
 ## LD-pruning
 ```{r, eval = run_ld_pruning, include = run_ld_pruning}
 ld_files <- paste0(config$qc_outputs$ld_prefix, c(".bed", ".bim", ".fam"))
@@ -230,8 +319,7 @@ pca_result <- run_pca_bigsnpr(
   obj = ld_obj,
   n_pcs = config$pca$n_pcs,
   output_file = config$pca$output_file,
-  covariates_file = config$pca$covariates_file,
-  ncores = config$pca$ncores
+  covariates_file = config$pca$covariates_file
 )
 
 # Plots PCA
@@ -247,24 +335,11 @@ pca_plot <- plot_pca(
 pca_plot
 ```
 
-## Kinship
-
-```{r, eval = run_kinship, include = run_kinship}
-# Creates GEMMA kinship matrix
-gemma_kinship_file <- run_gemma_kinship(
-  gemma = config$gemma$path,
-  bfile = qc_prefix,
-  output_prefix = config$gemma$kinship_prefix,
-  output_dir = config$gemma$output_dir,
-  overwrite = config$run$overwrite
+### Scree plot
+```{r, eval = run_pca, include = run_pca}
+plot_pca_scree(
+  pca_result = pca_result
 )
-
-# Calculates kinship statistics
-kinship_stats <- summarize_gemma_kinship(gemma_kinship_file)
-
-kinship_stats %>%
-  mutate(value = round(value, 4)) %>%
-  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 # GEA
@@ -489,7 +564,28 @@ plot_pcadapt_qq(
 )
 ```
 
-# Consensus SNP sets
+# Consensus SNP Sets
+## Method Support Exploration
+```{r}
+snp_overlap_results <- run_snp_overlap_all_variables(
+  config = config,
+  gemma_results = gemma_results,
+  lfmm_results = lfmm_results,
+  rda_results = rda_results,
+  pcadapt_results = pcadapt_results
+)
+
+# Overlap plot for each variable
+for (phenotype in names(snp_overlap_results$by_variable)) {
+  cat(
+    "\n\n## ",
+    phenotype,
+    "\n\n"
+  )
+  print(snp_overlap_results$by_variable[[phenotype]]$overlap_plot)
+}
+```
+
 ## Construction
 ```{r, eval = run_consensus, include = run_consensus}
 # if overwrite = FALSE and consensus set files exist for all phenotypes
@@ -518,23 +614,56 @@ if (!config$run$overwrite && consensus_files_exist(config, phenotypes = config$e
 consensus_results$evaluation %>%
   reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 
-# Consensus sets for each variable
+# Consensus sets for each environmental variable
 consensus_sets <- tagList(
   lapply(config$env$vars, function(phenotype) {
+
     res <- consensus_results$by_variable[[phenotype]]
     
+    # Primary per YAML
+    selected_primary <- config$consensus$primary_set
+
+    set_heading <- function(set_name, display_name) {
+      if (identical(selected_primary, set_name)) {
+        paste0(display_name, " — selected primary")
+      } else {
+        display_name
+      }
+    }
+
     tagList(
       tags$h2(phenotype),
+      tags$p(tags$strong("Primary set selected in configuration: "),
+             selected_primary),
       
-      tags$h3("Broad consensus"),
-      make_reactable(res$broad_2methods),
+      tags$h3(set_heading("env_2methods", "Environmental consensus")),
+      tags$p("SNPs supported by at least 2 environmental GEA methods"),
+      reactable(
+          res$env_2methods,
+          searchable = TRUE,
+          pagination = TRUE,
+          defaultPageSize = 10
+        ),
       
-      tags$h3("Environmental consensus"),
-      make_reactable(res$env_2methods),
-      
-      tags$h3("High-confidence consensus"),
-      make_reactable(res$high_confidence),
-      
+      tags$h3(set_heading("high_confidence", "High-confidence consensus")),
+      tags$p(paste0("SNPs supported by all 3 environmental methods, ",
+                    "or by at least 2 environmental methods + pcadapt")),
+      reactable(
+          res$high_confidence,
+          searchable = TRUE,
+          pagination = TRUE,
+          defaultPageSize = 10
+        ),
+
+      tags$h3("Exploratory support"),
+      tags$p("SNPs supported by exactly 1 environmental method + pcadapt"),
+      reactable(
+          res$exploratory_support,
+          searchable = TRUE,
+          pagination = TRUE,
+          defaultPageSize = 10
+        ),
+
       tags$hr()
     )
   })
@@ -569,6 +698,7 @@ if (!config$run$overwrite && ld_block_files_exist(config, phenotypes = config$en
 ld_results$summary %>%
   reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
+
 
 # Robustness Evaluation
 ```{r, eval = run_consensus_r, include = run_consensus_r}
