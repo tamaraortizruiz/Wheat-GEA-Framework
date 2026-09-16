@@ -125,13 +125,13 @@ prepare_consensus_inputs <- function(
     phenotype_name = target_phenotype,
     q_threshold = q_threshold
     )
-  lfmm  <- standardize_consensus_results(
+  lfmm <- standardize_consensus_results(
     lfmm_best,
     "LFMM",
     phenotype_name = target_phenotype,
     q_threshold = q_threshold
     )
-  rda   <- standardize_consensus_results(
+  rda <- standardize_consensus_results(
     rda_best,
     "RDA",
     phenotype_name = target_phenotype,
@@ -159,7 +159,6 @@ prepare_consensus_inputs <- function(
 # Converts standardized significant SNP results into method support
 # consensus_input = Output from prepare_consensus_inputs()
 # Output: One row per phenotype-SNP with TRUE/FALSE membership for each method
-# Note: This function does not construct or label consensus sets
 prepare_snp_overlap_data <- function(consensus_input) {
   
   method_names <- c("GEMMA", "LFMM", "RDA", "pcadapt")
@@ -190,7 +189,7 @@ prepare_snp_overlap_data <- function(consensus_input) {
       .groups = "drop"
     )
   
-  # Convert to binary membership columns
+  # Convert to membership columns
   overlap_data <- consensus_input %>%
     filter(method %in% method_names) %>%
     distinct(phenotype, marker, method) %>%
@@ -208,8 +207,6 @@ prepare_snp_overlap_data <- function(consensus_input) {
       overlap_data[[method_name]] <- FALSE
     }
   }
-  
-  # Ensure logical values
   overlap_data <- overlap_data %>%
     mutate(across(all_of(method_names), ~ tidyr::replace_na(as.logical(.x), FALSE)))
   
@@ -265,7 +262,11 @@ summarize_snp_intersections <- function(overlap_data) {
     )
   
   method_matrix <- as.matrix(intersection_summary[, method_names, drop = FALSE])
+  
+  # Number of methods in intersection
   intersection_summary$n_methods <- rowSums(method_matrix)
+  
+  # Method combination
   intersection_summary$intersection <- apply(method_matrix, 1, function(supported) {
       paste(method_names[as.logical(supported)], collapse = " + ")
     }
@@ -309,7 +310,7 @@ plot_snp_overlap <- function(
     )
   }
   
-  # Exclude only pcadapt
+  # Exclude only pcadapt supported results
   plot_data <- overlap_data %>%
     dplyr::filter(GEMMA | LFMM | RDA)
   
@@ -392,7 +393,7 @@ plot_snp_overlap <- function(
       plot.margin = margin(t = 0, r = 10, b = 5, l = 10)
     )
   
-  # Stack and align top and bottom of plot
+  # Stack top and bottom of plot
   patchwork::wrap_plots(
     intersection_bars,
     intersection_matrix,
@@ -416,9 +417,11 @@ run_snp_overlap_single_variable <- function(
     q_threshold = 0.1
 ) {
   
+  # Output directory
   phenotype_dir <- file.path(output_dir, phenotype)
   dir.create(phenotype_dir, recursive = TRUE, showWarnings = FALSE)
   
+  # Prepare input
   standardized_input <- prepare_consensus_inputs(
     gemma_results = gemma_results,
     lfmm_results = lfmm_results,
@@ -432,12 +435,12 @@ run_snp_overlap_single_variable <- function(
   
   intersection_summary <- summarize_snp_intersections(overlap_data)
   
+  # Plot
   overlap_plot <- plot_snp_overlap(
     overlap_data = overlap_data,
     phenotype = phenotype
   )
 
-  
   # Save one row per SNP with method membership
   write_csv(overlap_data, file.path(phenotype_dir, "snp_method_membership.csv"))
   
