@@ -6,6 +6,16 @@ safe_name <- function(x) {
   gsub("[^A-Za-z0-9_\\-]+", "_", x)
 }
 
+# read_csv_safe()
+# Reads an existing non-empty CSV or returns empty data frame
+read_csv_safe <- function(file) {
+  if (!file.exists(file) || file.info(file)$size == 0) {
+    return(data.frame())
+  }
+  
+  readr::read_csv(file, show_col_types = FALSE)
+}
+
 # check_ld_consensus_input()
 # Validates one consensus SNP table before LD block definition according to expected columns
 # consensus_df = Consensus data frame from past module
@@ -372,7 +382,7 @@ summarize_ld_blocks <- function(
     n_ld_blocks = n_distinct(lead_snps$ld_block),
     ld_retention_rate = nrow(lead_snps) / nrow(consensus_df),
     mean_method_support = mean(lead_snps$n_methods, na.rm = TRUE),
-    evidence_score = median(-log10(lead_snps$min_q), na.rm = TRUE)
+    median_min_q = median(lead_snps$min_q, na.rm = TRUE)
   )
 }
 

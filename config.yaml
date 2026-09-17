@@ -139,11 +139,9 @@ ld_pruning_ph:
 consensus_robustness:
   output_dir: "Output/ConsensusRobustness" #DNC
   
-consensus_bic_evaluation:
-  output_dir: "Output/Consensus_BIC_Evaluation"
-  n_pcs: 5
-  bic_tolerance: 2
-  require_better_than_baseline: true
+# Consensus set robustness evaluation
+primary_set:
+  output_dir: "Output/PrimarySNPs" #DNC
 
 # Accession-level adaptive scoring
 adaptive_scoring:

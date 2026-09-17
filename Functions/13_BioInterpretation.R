@@ -32,14 +32,14 @@ download_wheat_annotation <- function(
 
 # map_candidate_snps_to_genes()
 # Maps selected primary lead SNPs to nearby genes using chromosome and position
-# robustness_results = Robustness results object
+# primary_lead_snps = Final LD-pruned SNP table from the configured primary set
 # gene_annotation_file = Gene annotation file path
 # output_dir = Biological interpretation output directory
 # flank_bp = Flanking window, number of base pairs upstream and downstream of each gene to include
 # overwrite_annotation = defaults to FALSE, uses existing annotation file
 # Returns: A data frame of mapped SNP-gene relationships
 map_candidate_snps_to_genes <- function(
-    robustness_results,
+    primary_lead_snps,
     gene_annotation_file = "RawData/IWGSC_RefSeq_v2.1_annotation.gff3.gz",
     output_dir = "Output/BioInterpretation",
     flank_bp = 10000,
@@ -57,7 +57,7 @@ map_candidate_snps_to_genes <- function(
   )
   
   # Extract candidate SNPs
-  candidate_snps <- robustness_results$primary_lead_snps
+  candidate_snps <- primary_lead_snps
   
   if (is.null(candidate_snps) || nrow(candidate_snps) == 0) {
     stop("No candidate SNPs found in robustness_results$primary_lead_snps")
@@ -65,10 +65,6 @@ map_candidate_snps_to_genes <- function(
   
   # Format candidate SNP data
   candidate_snps <- candidate_snps %>%
-    filter(
-      selected_primary == TRUE,
-      is_lead == TRUE
-    ) %>%
     mutate(
       phenotype = as.character(phenotype),
       marker = as.character(marker),
@@ -538,12 +534,12 @@ summarize_candidate_genes <- function(mapped_candidate_genes) {
 # run_biointerpretation_workflow()
 # Full biological interpretation workflow, SNP-to-genen mapping + annotations
 # config = Pipeline configuration object
-# robustness_results = Results object from robustness module
+# primary_lead_snps = Final LD-pruned SNP table from the configured primary set
 # overwrite_annotation = defaults to FALSE, reuses existing annotation file
 # Returns: Annotated SNP-gene mapping data frame
 run_biointerpretation_workflow <- function(
     config,
-    robustness_results,
+    primary_lead_snps,
     overwrite_annotation = FALSE
 ) {
   
@@ -560,7 +556,7 @@ run_biointerpretation_workflow <- function(
   
   # SNP-to-gene mapping
   biointerp_df <- map_candidate_snps_to_genes(
-    robustness_results = robustness_results,
+    primary_lead_snps = primary_lead_snps,
     gene_annotation_file = gene_annotation_file,
     output_dir = output_dir,
     flank_bp = flank_bp,

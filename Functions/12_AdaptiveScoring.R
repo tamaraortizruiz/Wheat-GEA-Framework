@@ -249,7 +249,7 @@ score_accessions_one_variable <- function(
 
 # run_adaptive_germplasm_scoring()
 # Run accession-level directional germplasm scoring
-# robustness_results = Consensus robustness results
+# primary_lead_snps = Final LD-pruned SNP table from the configured primary set
 # gemma_results = GEMMA GEA results
 # rda_results = RDA GEA results
 # lfmm_results = LFMM GEA results
@@ -261,7 +261,7 @@ score_accessions_one_variable <- function(
 # Returns: SNP direction table, SNP direction summary, accession directional scores,
 # top 50 directionally extreme accessions per variable, directional score summary
 run_adaptive_germplasm_scoring <- function(
-    robustness_results,
+    primary_lead_snps,
     gemma_results,
     rda_results,
     lfmm_results,
@@ -276,33 +276,11 @@ run_adaptive_germplasm_scoring <- function(
   
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   
-  # Extract selected LD-pruned primary lead SNPs
-  primary_lead_snps <- robustness_results$primary_lead_snps
-  
   if (is.null(primary_lead_snps) || nrow(primary_lead_snps) == 0
   ) {
     stop("No primary lead SNPs found.")
   }
-  
-  primary_lead_snps <- primary_lead_snps %>%
-    filter(
-      selected_primary == TRUE,
-      is_lead == TRUE
-    ) %>%
-    dplyr::select(
-      phenotype,
-      marker
-    ) %>%
-    mutate(
-      phenotype = as.character(phenotype),
-      marker = as.character(marker)
-    ) %>%
-    distinct()
-  
-  if (nrow(primary_lead_snps) == 0) {
-    stop("No SNPs remained after filtering for selected primary lead SNPs.")
-  }
-  
+
   # Direction of each selected SNP
   direction_table <- infer_adaptive_snp_direction(
     primary_lead_snps = primary_lead_snps,

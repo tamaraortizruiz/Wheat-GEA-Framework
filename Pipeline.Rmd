@@ -34,7 +34,9 @@ run_bio_interp <- isTRUE(config$analysis$run_bio_interp)
 ```
 
 # Environmental Data Processing
+
 ## Extracting climatic variables
+
 ```{r, eval = run_env, include = run_env}
 # Extracts climate variables
 
@@ -71,7 +73,9 @@ if (config$subsetting$use) {
 ```
 
 ## Climatic Data Distribution
+
 ### Geographic distribution
+
 ```{r, eval = run_env, include = run_env}
 # Plots geographic distribution of selected climate variables
 for (var in config$env$vars) {
@@ -89,6 +93,7 @@ for (var in config$env$vars) {
 ```
 
 ### Correlation
+
 ```{r, eval = run_env, include = run_env}
 # Plots a correlation heatmap of climate variables
 plot_climate_cor_heatmap(
@@ -97,6 +102,7 @@ plot_climate_cor_heatmap(
 ```
 
 ### Climate PCA
+
 ```{r, eval = run_env, include = run_env}
 # Runs PCA of climate variables
 climate_pca <- run_climate_pca(
@@ -109,6 +115,7 @@ plot_climate_pca(climate_pca)
 ```
 
 # Genotype Quality Control
+
 ```{r, eval = run_qc, include = run_qc}
 qc_files <- paste0(config$qc_outputs$qc_prefix, c(".bed", ".bim", ".fam"))
 
@@ -180,15 +187,19 @@ qc_plots <- plot_genotype_qc_overview(
 )
 
 qc_plots$marker_summary %>%
-  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
+  reactable(
+    sortable = TRUE,
+    filterable = TRUE,
+    searchable = TRUE
+  )
 
 qc_plots$marker_count_plot
 
 qc_plots$marker_position_plot
 ```
 
-
 # Kinship
+
 ```{r, eval = run_kinship, include = run_kinship}
 # Creates GEMMA kinship matrix
 gemma_kinship_file <- run_gemma_kinship(
@@ -201,10 +212,17 @@ gemma_kinship_file <- run_gemma_kinship(
 
 # Calculates kinship statistics
 kinship_stats <- summarize_gemma_kinship(gemma_kinship_file)
-kinship_stats
+
+kinship_stats%>%
+  reactable(
+    sortable = TRUE,
+    filterable = TRUE,
+    searchable = TRUE
+  )
 ```
 
 ## Diagnostics
+
 ```{r, eval = run_kinship, include = run_kinship}
 # Calculate kinship diagnostics
 kinship_diag <- diagnose_gemma_kinship(
@@ -214,7 +232,13 @@ kinship_diag <- diagnose_gemma_kinship(
   diag_mad_threshold = config$kinship_qc$diagonal_mad_threshold
 )
 
-kinship_diag$summary
+# Summary
+kinship_diag$summary %>%
+  reactable(
+    sortable = TRUE,
+    filterable = TRUE,
+    searchable = TRUE
+  )
 
 # Diagonal plot
 kinship_diag$plots$diagonal
@@ -226,13 +250,24 @@ kinship_diag$plots$off_diagonal
 kinship_diag$plots$max_similarity
 
 # Duplicate pairs
-kinship_diag$duplicate_pairs
+kinship_diag$duplicate_pairs %>%
+  reactable(
+    sortable = TRUE,
+    filterable = TRUE,
+    searchable = TRUE
+  )
 
 # Diagonal outliers
-subset(kinship_diag$diagonal, flagged)
+subset(kinship_diag$diagonal, flagged) %>%
+  reactable(
+    sortable = TRUE,
+    filterable = TRUE,
+    searchable = TRUE
+  )
 ```
 
 ## Filtering
+
 ```{r, eval = run_kinship, include = run_kinship}
 kinship_filter <- filter_kinship_samples(
   kin_diag = kinship_diag,
@@ -285,7 +320,9 @@ dimensions %>%
 ```
 
 # Population Structure
+
 ## LD-pruning
+
 ```{r, eval = run_ld_pruning, include = run_ld_pruning}
 ld_files <- paste0(config$qc_outputs$ld_prefix, c(".bed", ".bim", ".fam"))
 
@@ -307,6 +344,7 @@ if (!config$run$overwrite && all(file.exists(ld_files))) {
 ```
 
 ## PCA
+
 ```{r, eval = run_pca, include = run_pca}
 # Loading LD-pruned PLINK data as bigSNP object
 ld_obj <- plink_to_bigSNP(
@@ -336,6 +374,7 @@ pca_plot
 ```
 
 ### Scree plot
+
 ```{r, eval = run_pca, include = run_pca}
 plot_pca_scree(
   pca_result = pca_result
@@ -343,7 +382,9 @@ plot_pca_scree(
 ```
 
 # GEA
+
 ## LMM (GEMMA)
+
 ```{r, eval = run_lmm, include = run_lmm}
 # Defines result files
 gemma_files <- file.path(
@@ -369,19 +410,31 @@ if (!config$run$overwrite && all(file.exists(gemma_files))) {
 ```
 
 ### Results
+
 #### Evaluation
+
 ```{r, eval = run_lmm, include = run_lmm}
 gemma_results$evaluation %>%
   reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 #### Best by variable
+
 ```{r, eval = run_lmm, include = run_lmm}
 gemma_results$best_by_variable %>%
-  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
+  dplyr::select(
+    -lambda_distance,
+    -lambda_acceptable,
+    -has_signal
+    ) %>%
+  reactable(
+    sortable = TRUE,
+    filterable = TRUE,
+    searchable = TRUE)
 ```
 
 ### QQ Plots
+
 ```{r, eval = run_lmm, include = run_lmm}
 for (pheno in gemma_results$best_by_variable$phenotype){
   print(
@@ -394,6 +447,7 @@ for (pheno in gemma_results$best_by_variable$phenotype){
 ```
 
 ## LFMM
+
 ```{r, eval = run_lfmm, include = run_lfmm}
 # Defines result files
 lfmm_files <- file.path(
@@ -433,19 +487,33 @@ if (!config$run$overwrite && all(file.exists(lfmm_files))) {
 ```
 
 ### Results
+
 #### Evaluation
+
 ```{r, eval = run_lfmm, include = run_lfmm}
 lfmm_results$evaluation %>%
+  dplyr::select(-K) %>%
   reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 #### Best by variable
+
 ```{r, eval = run_lfmm, include = run_lfmm}
 lfmm_results$best_by_variable %>%
-  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
+  dplyr::select(
+    -K,
+    -lambda_distance,
+    -lambda_acceptable,
+    -has_signal
+    ) %>%
+  reactable(
+    sortable = TRUE,
+    filterable = TRUE,
+    searchable = TRUE)
 ```
 
 ### QQ Plots
+
 ```{r, eval = run_lfmm, include = run_lfmm}
 for (pheno in lfmm_results$best_by_variable$phenotype) {
   print(
@@ -458,6 +526,7 @@ for (pheno in lfmm_results$best_by_variable$phenotype) {
 ```
 
 ## RDA
+
 ```{r, eval = run_rda, include = run_rda}
 # Defines result files
 rda_files <- file.path(
@@ -501,19 +570,31 @@ if (!config$run$overwrite && all(file.exists(rda_files))) {
 ```
 
 ### Results
+
 #### Evaluation
+
 ```{r, eval = run_rda, include = run_rda}
 rda_results$evaluation %>%
   reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 #### Best by variable
+
 ```{r, eval = run_rda, include = run_rda}
 rda_results$best_by_variable %>%
-  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
+  dplyr::select(
+    -lambda_distance,
+    -lambda_acceptable,
+    -has_signal
+    ) %>%
+  reactable(
+    sortable = TRUE,
+    filterable = TRUE,
+    searchable = TRUE)
 ```
 
 ### QQ Plots
+
 ```{r}
 for (pheno in rda_results$best_by_variable$phenotype) {
   print(
@@ -526,6 +607,7 @@ for (pheno in rda_results$best_by_variable$phenotype) {
 ```
 
 ## pcadapt
+
 ```{r, eval = run_pcadapt, include = run_pcadapt}
 # Defines result files
 pcadapt_files <- file.path(
@@ -549,15 +631,27 @@ if (!config$run$overwrite &&
 ```
 
 ### Results
+
 ```{r, eval = run_pcadapt, include = run_pcadapt}
 pcadapt_results$evaluation %>%
+  dplyr::select(-K) %>%
   reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 
 pcadapt_results$best_evaluation %>%
-  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
+  dplyr::select(
+    -K,
+    -lambda_distance,
+    -lambda_acceptable,
+    -has_signal
+    ) %>%
+  reactable(
+    sortable = TRUE,
+    filterable = TRUE,
+    searchable = TRUE)
 ```
 
 ### QQ Plot
+
 ```{r}
 plot_pcadapt_qq(
   results = pcadapt_results$results
@@ -565,7 +659,9 @@ plot_pcadapt_qq(
 ```
 
 # Consensus SNP Sets
+
 ## Method Support Exploration
+
 ```{r}
 snp_overlap_results <- run_snp_overlap_all_variables(
   config = config,
@@ -575,18 +671,28 @@ snp_overlap_results <- run_snp_overlap_all_variables(
   pcadapt_results = pcadapt_results
 )
 
-# Overlap plot for each variable
-for (phenotype in names(snp_overlap_results$by_variable)) {
-  cat(
-    "\n\n## ",
-    phenotype,
-    "\n\n"
-  )
-  print(snp_overlap_results$by_variable[[phenotype]]$overlap_plot)
-}
+# Overlap plots for each environmental variable
+snp_overlap_plots <- tagList(
+  lapply(names(snp_overlap_results$by_variable), function(phenotype) {
+    overlap_plot <- snp_overlap_results$by_variable[[phenotype]]$overlap_plot
+    
+    tagList(
+      tags$h3(phenotype),
+      plotTag(
+        {print(overlap_plot)},
+        alt = paste("UpSet plot showing SNP overlap among GEA methods for", phenotype)
+      ),
+      
+      tags$hr()
+    )
+  })
+)
+
+snp_overlap_plots
 ```
 
 ## Construction
+
 ```{r, eval = run_consensus, include = run_consensus}
 # if overwrite = FALSE and consensus set files exist for all phenotypes
 if (!config$run$overwrite && consensus_files_exist(config, phenotypes = config$env$vars)) {
@@ -609,20 +715,26 @@ if (!config$run$overwrite && consensus_files_exist(config, phenotypes = config$e
 ```
 
 ## Evaluation
+
 ```{r, eval = run_consensus, include = run_consensus}
 # Consensus set evaluation
 consensus_results$evaluation %>%
+  dplyr::select(
+    -median_methods,
+    -median_qval,
+    -selected_as_primary
+  ) %>%
   reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 
 # Consensus sets for each environmental variable
 consensus_sets <- tagList(
   lapply(config$env$vars, function(phenotype) {
-
+    
     res <- consensus_results$by_variable[[phenotype]]
     
     # Primary per YAML
     selected_primary <- config$consensus$primary_set
-
+    
     set_heading <- function(set_name, display_name) {
       if (identical(selected_primary, set_name)) {
         paste0(display_name, " — selected primary")
@@ -630,7 +742,7 @@ consensus_sets <- tagList(
         display_name
       }
     }
-
+    
     tagList(
       tags$h2(phenotype),
       tags$p(tags$strong("Primary set selected in configuration: "),
@@ -639,31 +751,31 @@ consensus_sets <- tagList(
       tags$h3(set_heading("env_2methods", "Environmental consensus")),
       tags$p("SNPs supported by at least 2 environmental GEA methods"),
       reactable(
-          res$env_2methods,
-          searchable = TRUE,
-          pagination = TRUE,
-          defaultPageSize = 10
-        ),
+        res$env_2methods,
+        searchable = TRUE,
+        pagination = TRUE,
+        defaultPageSize = 10
+      ),
       
       tags$h3(set_heading("high_confidence", "High-confidence consensus")),
       tags$p(paste0("SNPs supported by all 3 environmental methods, ",
                     "or by at least 2 environmental methods + pcadapt")),
       reactable(
-          res$high_confidence,
-          searchable = TRUE,
-          pagination = TRUE,
-          defaultPageSize = 10
-        ),
-
+        res$high_confidence,
+        searchable = TRUE,
+        pagination = TRUE,
+        defaultPageSize = 10
+      ),
+      
       tags$h3("Exploratory support"),
       tags$p("SNPs supported by exactly 1 environmental method + pcadapt"),
       reactable(
-          res$exploratory_support,
-          searchable = TRUE,
-          pagination = TRUE,
-          defaultPageSize = 10
-        ),
-
+        res$exploratory_support,
+        searchable = TRUE,
+        pagination = TRUE,
+        defaultPageSize = 10
+      ),
+      
       tags$hr()
     )
   })
@@ -673,6 +785,7 @@ consensus_sets
 ```
 
 # Post-Hoc LD Block Pruning
+
 ```{r, eval = run_consensus_ld, include = run_consensus_ld}
 # if overwrite = FALSE and LD block files exist
 if (!config$run$overwrite && ld_block_files_exist(config, phenotypes = config$env$vars)) {
@@ -694,47 +807,57 @@ if (!config$run$overwrite && ld_block_files_exist(config, phenotypes = config$en
 ```
 
 ## Results
+
 ```{r, eval = run_consensus_ld, include = run_consensus_ld}
 ld_results$summary %>%
+  dplyr::select(
+    -n_ld_blocks,
+    -median_min_q
+  ) %>%
   reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
-
-# Robustness Evaluation
-```{r, eval = run_consensus_r, include = run_consensus_r}
-# Runs robustness evaluation
-robustness_results <- run_consensus_robustness(
+# Primary LD-Pruned SNP Set
+```{r, eval = run_consensus_ld, include = run_consensus_ld}
+# Extract configured primary consensus set after LD processing
+primary <- create_primary_snp_results(
+  config = config,
   ld_results = ld_results,
-  output_dir = config$consensus_robustness$output_dir
+  phenotypes = config$env$vars
 )
 ```
 
-## Evaluation Results
-```{r, eval = run_consensus_r, include = run_consensus_r}
-robustness_results$evaluation %>%
-  dplyr::select(-lead_snp_signature) %>%
-  reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
-```
-
-## Selected Primary Sets Evaluation Summary
-```{r, eval = run_consensus_r, include = run_consensus_r}
-robustness_results$primary_summary %>%
-  dplyr::select(-lead_snp_signature) %>%
+## Summary
+```{r, eval = run_consensus_ld, include = run_consensus_ld}
+primary$summary %>%
+  dplyr::select(
+    -n_ld_blocks,
+    -median_min_q
+  ) %>%
   reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
 ## Primary Lead SNPs (All Variables)
-```{r, eval = run_consensus_r, include = run_consensus_r}
-robustness_results$primary_lead_snps %>%
+```{r, eval = run_consensus_ld, include = run_consensus_ld}
+primary$lead_snps %>%
+  dplyr::select(
+    -methods,
+    -n_env_methods,
+    -min_env_p,
+    -min_env_q,
+    -consensus_set,
+    -ld_block,
+    -max_r2_in_block
+  ) %>%
   reactable(sortable = TRUE, filterable = TRUE, searchable = TRUE)
 ```
 
-
 # Adaptive Scoring
+
 ```{r, eval = run_adaptive_scoring, include = run_adaptive_scoring}
 # Calculate adaptive score (for each variable) for all accessions
 adaptive_results <- run_adaptive_germplasm_scoring(
-  robustness_results = robustness_results,
+  primary_lead_snps = primary$lead_snps,
   gemma_results = gemma_results,
   rda_results = rda_results,
   lfmm_results = lfmm_results,
@@ -747,6 +870,7 @@ adaptive_results <- run_adaptive_germplasm_scoring(
 ```
 
 ## Results
+
 ```{r, eval = run_adaptive_scoring, include = run_adaptive_scoring, results='asis'}
 # Adaptive score summary
 adaptive_results$directional_score_summary %>%
@@ -766,6 +890,10 @@ for (phenotype_name in unique(top_accessions$phenotype)) {
   )
   
   table_data <- top_accessions %>%
+    dplyr::select(
+      -extremeness_percentile,
+      -scored_snp_fraction
+      ) %>%
     filter(phenotype == phenotype_name) %>%
     arrange(desc(absolute_directional_score))
   
@@ -783,40 +911,28 @@ for (phenotype_name in unique(top_accessions$phenotype)) {
   )
 }
 ```
+
 # Adaptive Candidate Markers: QTL plot
-```{r, eval = run_adaptive_scoring, include = run_adaptive_scoring}
+```{r, eval = run_consensus_ld, include = run_consensus_ld}
 plot_primary_qtl(
-  primary_lead_snps = robustness_results$primary_lead_snps,
+  primary_lead_snps = primary$lead_snps,
   bim_file = paste0(qc_prefix, ".bim"),
   direction_table = adaptive_results$snp_directions
 )
 ```
 
 # Biological Interpretation
+
 ```{r, eval = run_bio_interp, include = run_bio_interp}
 biointerp_df <- run_biointerpretation_workflow(
   config = config,
-  robustness_results = robustness_results,
+  primary_lead_snps = primary$lead_snps,
   overwrite_annotation = config$run$overwrite
 )
 ```
 
 ## Results
-```{r, eval = run_bio_interp, include = run_bio_interp}
-biointerp_df %>%
-  reactable(
-    sortable = TRUE,
-    filterable = TRUE,
-    searchable = TRUE,
-    pagination = TRUE,
-    defaultPageSize = 10,
-    defaultColDef = colDef(
-      format = colFormat(digits = 3)
-    )
-  )
-```
 
-## Candidate Gene Summary
 ```{r, eval = run_bio_interp, include = run_bio_interp}
 candidate_gene_summary <- summarize_candidate_genes(biointerp_df)
   
@@ -832,4 +948,3 @@ candidate_gene_summary %>%
     )
   )
 ```
-

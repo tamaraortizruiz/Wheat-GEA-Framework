@@ -27,7 +27,7 @@ This project implements a modular workflow for identifying genomic variants asso
 
 7.  Consensus SNP set construction
 
-8.  Robustness-based consensus selection
+8.  LD-processing and primary set evaluation
 
 9.  Accession-level adaptive germplasm scoring
 
