@@ -564,9 +564,9 @@ run_ld_blocks_single_variable <- function(
   message("\nRunning LD block pruning for: ", phenotype)
   
   consensus_sets <- list(
-    broad_2methods = consensus_variable_result$broad_2methods,
     env_2methods = consensus_variable_result$env_2methods,
-    high_confidence = consensus_variable_result$high_confidence
+    high_confidence = consensus_variable_result$high_confidence,
+    exploratory_support = consensus_variable_result$exploratory_support
   )
   
   ld_results <- list()
@@ -701,7 +701,7 @@ load_ld_block_results <- function(
 ) {
   
   output_dir <- config$ld_pruning_ph$output_dir
-  consensus_sets <- c("broad_2methods", "env_2methods", "high_confidence")
+  consensus_sets <- c("env_2methods", "high_confidence", "exploratory_support")
   
   ld_all <- list()
   

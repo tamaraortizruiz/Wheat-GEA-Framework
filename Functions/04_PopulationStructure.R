@@ -660,13 +660,13 @@ filter_kinship_samples <- function(
   )
   
   if (status != 0) {
-    stop("PLINK kinship sample filtering failed.")
+    stop("PLINK kinship sample filtering failed")
   }
 
   # Confirm output was created
   temp_files <- paste0(temp_prefix, c(".bed", ".bim", ".fam"))
   if (!all(file.exists(temp_files))) {
-    stop("Temporary filtered PLINK dataset was not created correctly.")
+    stop("Temporary filtered PLINK dataset was not created correctly")
   }
   
   filtered_fam <- read.table(paste0(temp_prefix, ".fam"), stringsAsFactors = FALSE)

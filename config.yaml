@@ -2,7 +2,7 @@ project:
   name: "Bread Wheat GEA Pipeline"
   
 run:
-  overwrite: false # if TRUE, deletes all existing files and reruns the pipeline from scratch
+  overwrite: TRUE # if TRUE, deletes all existing files and reruns the pipeline from scratch
 
 plink:
   path: "/Users/tamaraortiz/plink_mac_20250819/plink" # Local PLINK path
@@ -20,7 +20,7 @@ analysis:
   run_pcadapt: true
   run_consensus: true
   run_consensus_ld: true
-  run_consensus_robustness: true
+  run_primary_snps: true
   run_adaptive_scoring: true
   run_bio_interp: true
 
@@ -125,6 +125,7 @@ pcadapt:
 consensus:
   output_dir: "Output/ConsensusSNP" #DNC
   q_threshold: 0.05 # q-value significance threshold
+  primary_set: "env_2methods" # accepts "env_2methods" or "high_confidence"
   
 # LD pruning and blocking
 ld_pruning_ph:
@@ -135,10 +136,6 @@ ld_pruning_ph:
   ld_window: 99999
   allow_extra_chr: true
 
-# Consensus set robustness evaluation
-consensus_robustness:
-  output_dir: "Output/ConsensusRobustness" #DNC
-  
 # Consensus set robustness evaluation
 primary_set:
   output_dir: "Output/PrimarySNPs" #DNC
@@ -154,3 +151,8 @@ biological_interpretation:
   flank_bp: 10000
   use_biomart: true
   tf_annotation_file: "RawData/wheatpro_TFlist_GRN.csv" # Optional user-defined TF annotation file
+  
+# Serialized stage results used by Pipeline.Rmd
+pipeline:
+  stage_dir: "Output/PipelineStages" #DNC
+

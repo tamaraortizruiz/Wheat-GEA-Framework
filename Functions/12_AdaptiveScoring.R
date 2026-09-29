@@ -439,3 +439,26 @@ run_adaptive_germplasm_scoring <- function(
   )
 }
 
+# load_adaptive_scoring_results()
+# Loads saved accession-level scoring tables for reporting or downstream stages
+load_adaptive_scoring_results <- function(config) {
+  output_dir <- config$adaptive_scoring$output_dir
+  files <- c(
+    snp_directions = "adaptive_snp_direction_table.csv",
+    direction_summary = "adaptive_snp_direction_summary.csv",
+    adaptive_scores = "accession_directional_scores.csv",
+    top_50_extreme_accessions = "top_50_directionally_extreme_accessions_by_variable.csv",
+    top_50_higher_direction = "top_50_higher_direction_accessions_by_variable.csv",
+    top_50_lower_direction = "top_50_lower_direction_accessions_by_variable.csv",
+    directional_score_summary = "directional_score_summary_by_variable.csv"
+  )
+  paths <- file.path(output_dir, unname(files))
+  
+  if (!all(file.exists(paths))) {
+    stop(
+      "Saved adaptive-scoring results were not found"
+    )
+  }
+  
+  setNames(lapply(paths, read.csv, check.names = FALSE), names(files))
+}

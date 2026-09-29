@@ -121,6 +121,54 @@ create_primary_snp_results <- function(
   )
 }
 
+# primary_snp_files_match_config()
+# Checks that saved primary outputs belong to the currently configured set
+primary_snp_files_match_config <- function(
+    config,
+    output_dir = config$ld_pruning_ph$output_dir
+) {
+  summary_file <- file.path(output_dir, "primary_ld_summary.csv")
+  snp_file <- file.path(output_dir, "final_primary_ld_pruned_snps.csv")
+  if (!all(file.exists(c(summary_file, snp_file)))) {
+    return(FALSE)
+  }
+  summary <- read.csv(summary_file, check.names = FALSE)
+  configured <- validate_primary_set(config$consensus$primary_set)
+  "consensus_set" %in% names(summary) &&
+    nrow(summary) > 0 &&
+    all(unique(summary$consensus_set) == configured)
+}
+
+# load_primary_snp_results()
+# Loads the configured primary set created after LD processing
+load_primary_snp_results <- function(
+    config,
+    output_dir = config$ld_pruning_ph$output_dir
+) {
+  summary_file <- file.path(output_dir, "primary_ld_summary.csv")
+  snp_file <- file.path(output_dir, "final_primary_ld_pruned_snps.csv")
+  
+  if (!all(file.exists(c(summary_file, snp_file)))) {
+    stop("Saved primary SNP results were not found")
+  }
+  
+  if (!primary_snp_files_match_config(config, output_dir)) {
+    stop("Saved primary SNP results do not match config$consensus$primary_set")
+  }
+  
+  primary_set <- config$consensus$primary_set
+  if (is.null(primary_set) || length(primary_set) == 0 || is.na(primary_set) || primary_set == "") {
+    primary_set <- "env_2methods"
+  }
+  
+  list(
+    set = validate_primary_set(primary_set),
+    summary = read.csv(summary_file, check.names = FALSE),
+    lead_snps = read.csv(snp_file, check.names = FALSE)
+  )
+}
+
+# QTL plot of primary lead SNPs
 plot_primary_qtl <- function(
     primary_lead_snps,
     bim_file,
