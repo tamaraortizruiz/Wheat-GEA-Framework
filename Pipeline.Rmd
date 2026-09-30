@@ -163,9 +163,21 @@ print(kinship_result$diagnostics$plots$max_similarity)
 
 ## Filtering
 
+### Duplicates
+
 ```{r, eval=!is.null(kinship_result)}
 kinship_result$diagnostics$duplicate_pairs %>% show_table()
+```
+
+### Diagonal outliers
+
+```{r, eval=!is.null(kinship_result)}
 subset(kinship_result$diagnostics$diagonal, flagged) %>% show_table()
+```
+
+### Sample removal list
+
+```{r, eval=!is.null(kinship_result)}
 kinship_result$filter$removal_table %>% show_table()
 ```
 
@@ -190,55 +202,92 @@ plot_pca_cumulative_variance(pca_result)
 
 ## LMM (GEMMA)
 
+### Evaluation
+
 ```{r, eval=!is.null(gemma_results)}
 gemma_results$evaluation %>% show_table()
+```
+
+### Best by variable
+
+```{r, eval=!is.null(gemma_results)}
 gemma_results$best_by_variable %>%
   dplyr::select(-dplyr::any_of(c("lambda_distance", "lambda_acceptable", "has_signal"))) %>% show_table()
 ```
 
+### QQ Plots
+
 ```{r, eval=!is.null(gemma_results), results='asis'}
 for (phenotype in gemma_results$best_by_variable$phenotype) {
-  cat("\n\n### QQ plot: ", phenotype, "\n\n", sep = "")
+  cat("\n\n#### ", phenotype, "\n\n", sep = "")
   print(plot_gemma_qq(gemma_results$results, phenotype))
 }
 ```
 
 ## LFMM
 
+### Evaluation
+
 ```{r, eval=!is.null(lfmm_results)}
 lfmm_results$evaluation %>% dplyr::select(-dplyr::any_of("K")) %>% show_table()
+```
+
+### Best by variable
+
+```{r, eval=!is.null(lfmm_results)}
 lfmm_results$best_by_variable %>%
   dplyr::select(-dplyr::any_of(c("K", "lambda_distance", "lambda_acceptable", "has_signal"))) %>% show_table()
 ```
 
+### QQ Plots
+
 ```{r, eval=!is.null(lfmm_results), results='asis'}
 for (phenotype in lfmm_results$best_by_variable$phenotype) {
-  cat("\n\n### QQ plot: ", phenotype, "\n\n", sep = "")
+  cat("\n\n#### ", phenotype, "\n\n", sep = "")
   print(plot_lfmm_qq(lfmm_results$results, phenotype))
 }
 ```
 
 ## RDA
 
+### Evaluation
+
 ```{r, eval=!is.null(rda_results)}
 rda_results$evaluation %>% show_table()
+```
+
+### Best by variable
+
+```{r, eval=!is.null(rda_results)}
 rda_results$best_by_variable %>%
   dplyr::select(-dplyr::any_of(c("lambda_distance", "lambda_acceptable", "has_signal"))) %>% show_table()
 ```
 
+### QQ Plots
 ```{r, eval=!is.null(rda_results), results='asis'}
 for (phenotype in rda_results$best_by_variable$phenotype) {
-  cat("\n\n### QQ plot: ", phenotype, "\n\n", sep = "")
+  cat("\n\n#### ", phenotype, "\n\n", sep = "")
   print(plot_rda_qq(rda_results$results, phenotype))
 }
 ```
 
 ## pcadapt
 
+### Evaluation
+
 ```{r, eval=!is.null(pcadapt_results)}
 pcadapt_results$evaluation %>% dplyr::select(-dplyr::any_of("K")) %>% show_table()
+```
+
+### Best performing
+
+```{r, eval=!is.null(pcadapt_results)}
 pcadapt_results$best_evaluation %>%
   dplyr::select(-dplyr::any_of(c("K", "lambda_distance", "lambda_acceptable", "has_signal"))) %>% show_table()
+```
+
+### QQ Plot
+```{r, eval=!is.null(pcadapt_results)}
 plot_pcadapt_qq(pcadapt_results$results)
 ```
 
@@ -268,24 +317,46 @@ consensus_results$evaluation %>%
 ## SNP tables by environmental variable
 
 ```{r, eval=!is.null(consensus_results) && !is.null(primary), results='asis'}
-for (phenotype in config$env$vars) {
+sections <- lapply(config$env$vars, function(phenotype) {
   result <- consensus_results$by_variable[[phenotype]]
-  cat("\n\n### ", phenotype, "\n\n", sep = "")
-  cat("#### Environmental consensus",
-      if (primary$set == "env_2methods") " — selected primary"
-      else "", "\n\n")
-  cat("SNPs supported by at least two environmental GEA methods.\n\n")
-  print(show_table(result$env_2methods))
-  cat("\n\n#### High-confidence consensus",
-      if (primary$set == "high_confidence") " — selected primary"
-      else "", "\n\n")
-  cat("SNPs supported by all three environmental methods,
-      or at least two environmental methods + pcadapt.\n\n")
-  print(show_table(result$high_confidence))
-  cat("\n\n#### Exploratory support\n\n")
-  cat("SNPs supported by exactly one environmental method + pcadapt.\n\n")
-  print(show_table(result$exploratory_support))
-}
+
+  htmltools::tagList(
+    htmltools::tags$h3(phenotype),
+
+    htmltools::tags$h4(
+      paste0(
+        "Environmental consensus",
+        if (primary$set == "env_2methods") " - selected primary" else ""
+      )
+    ),
+    htmltools::tags$p(
+      "SNPs supported by at least two environmental GEA methods."
+    ),
+    show_table(result$env_2methods),
+
+    htmltools::tags$h4(
+      paste0(
+        "High-confidence consensus",
+        if (primary$set == "high_confidence") " - selected primary" else ""
+      )
+    ),
+    htmltools::tags$p(
+      paste(
+        "SNPs supported by all three environmental methods,",
+        "or at least two environmental methods + pcadapt."
+      )
+    ),
+    show_table(result$high_confidence),
+
+    htmltools::tags$h4("Exploratory support"),
+    htmltools::tags$p(
+      "SNPs supported by exactly one environmental method + pcadapt."
+    ),
+    show_table(result$exploratory_support)
+  )
+})
+
+htmltools::tagList(sections)
 ```
 
 # Post-Hoc LD Processing
@@ -314,21 +385,32 @@ primary$lead_snps %>%
 
 # Adaptive Germplasm Scoring
 
+## Summary
+
 ```{r, eval=!is.null(adaptive_results)}
 adaptive_results$directional_score_summary %>% show_table()
 ```
 
-```{r, eval=!is.null(adaptive_results), results='asis'}
+```{r top-extreme-accessions, echo=FALSE}
 top_accessions <- adaptive_results$top_50_extreme_accessions
 
-for (phenotype in unique(top_accessions$phenotype)) {
-  cat("\n\n## Top directionally extreme accessions: ", phenotype, "\n\n", sep = "")
+sections <- lapply(unique(top_accessions$phenotype), function(phenotype) {
   table_data <- top_accessions %>%
     dplyr::filter(.data$phenotype == .env$phenotype) %>%
-    dplyr::select(-dplyr::any_of(c("extremeness_percentile", "scored_snp_fraction"))) %>%
+    dplyr::select(
+      -dplyr::any_of(c("extremeness_percentile", "scored_snp_fraction"))
+    ) %>%
     dplyr::arrange(dplyr::desc(.data$absolute_directional_score))
-  print(show_table(table_data))
-}
+
+  htmltools::tagList(
+    htmltools::tags$h2(
+      paste0("Top directionally extreme accessions: ", phenotype)
+    ),
+    show_table(table_data)
+  )
+})
+
+htmltools::tagList(sections)
 ```
 
 ## Adaptive candidate-marker QTL plot

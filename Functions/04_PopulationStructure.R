@@ -22,13 +22,13 @@ run_pca_bigsnpr <- function(
   map <- obj$map
   
   # Impute missing genotypes
-  G_imp <- snp_fastImputeSimple(G, method = "mean2", ncores = max(1, nb_cores() - 1))
+  G_imp <- snp_fastImputeSimple(G, method = "mean2", ncores = 1)
   
   # PCA using bigsnpr
   pca <- big_randomSVD(G_imp,
                        k = n_pcs,
                        fun.scaling = snp_scaleBinom(),
-                       ncores = max(1, nb_cores() - 1))
+                       ncores = 1)
   
   # PC scores
   scores <- as.data.frame(pca$u)
