@@ -2,7 +2,7 @@ project:
   name: "Bread Wheat GEA Pipeline"
   
 run:
-  overwrite: FALSE # if TRUE, deletes all existing files and reruns the pipeline from scratch
+  overwrite: TRUE # if TRUE, deletes all existing files and reruns the pipeline from scratch
 
 plink:
   path: "/Users/tamaraortiz/plink_mac_20250819/plink" # Local PLINK path
@@ -112,6 +112,7 @@ lfmm:
 
 # RDA
 rda:
+  use_full_qc: true
   output_dir: "Output/GEA/RDA" #DNC
   pc_strategies: [0, 3, 5] # Number of PCs for structure correction
   q_threshold: 0.05 # q-value significance threshold

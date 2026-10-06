@@ -5,38 +5,134 @@
 # method_results = Method specific results
 # value_col = Method specific direction value column
 # source_name = Direction source method
+# scoring_map = Marker map and allele data
+# q_threshold = Configurable q-value threshold
 # Returns: Formatted method results with direction information
 make_direction_table <- function(
     method_results,
     value_col,
-    source_name
+    source_name,
+    scoring_map,
+    q_threshold
 ) {
   
-  results <- method_results$results
+  # Selected strategy per environmental variable
+  selected <- method_results$best_by_variable %>%
+    dplyr::select(phenotype, strategy) %>%
+    dplyr::distinct()
   
-  results %>%
-    filter(!is.na(.data[[value_col]])) %>%
-    transmute(
-      phenotype = as.character(phenotype),
-      marker = as.character(marker),
-      direction_value = as.numeric(.data[[value_col]]),
-      p_value = p_value,
-      # define direction
-      direction = case_when(
-        direction_value > 0 ~ 1,
-        direction_value < 0 ~ -1,
-        TRUE ~ NA_real_
-      ),
-      direction_source = source_name
-    ) %>%
-    filter(!is.na(marker), !is.na(direction)) %>%
-    group_by(phenotype, marker) %>%
-    # smallest p-value
-    arrange(p_value, .by_group = TRUE) %>%
-    dplyr::slice(1) %>%
-    ungroup()
+  if (anyDuplicated(selected$phenotype)) {
+    stop("More than one selected strategy per variable: ", source_name)
+  }
+  
+  # Retain significant supporting results
+  results <- method_results$results %>%
+    dplyr::semi_join(selected, by = c("phenotype", "strategy")) %>%
+    dplyr::filter(
+      !is.na(marker),
+      is.finite(q_value),
+      q_value <= q_threshold,
+      is.finite(.data[[value_col]]),
+      .data[[value_col]] != 0
+    )
+  
+  # GEMMA calls second allele allele0
+  # LFMM and RDA retain allele2
+  other_col <- if (source_name == "GEMMA") {
+    "allele0"
+  } else {
+    "allele2"
+  }
+  
+  required <- c("allele1", other_col)
+  
+  if (!all(required %in% names(results))) {
+    stop("Missing allele columns in ", source_name, " results")
+  }
+  
+  if (!all(c("marker.ID", "allele1", "allele2") %in% names(scoring_map))) {
+    stop("Missing marker or allele columns in scoring_map")
+  }
+  
+  if (anyDuplicated(scoring_map$marker.ID)) {
+    stop("Scoring map contains duplicate marker IDs")
+  }
+  
+  # Match result to scoring genotype map
+  marker_index <- match(as.character(results$marker), as.character(scoring_map$marker.ID))
+  
+  if (anyNA(marker_index)) {
+    stop("Some ", source_name, " direction markers are absent from the scoring map")
+  }
+  
+  clean_allele <- function(x) {
+    toupper(trimws(as.character(x)))
+  }
+  
+  method_a1 <- clean_allele(results$allele1)
+  method_a2 <- clean_allele(results[[other_col]])
+  
+  scoring_a1 <- clean_allele(scoring_map$allele1[marker_index])
+  scoring_a2 <- clean_allele(scoring_map$allele2[marker_index])
+  
+  valid <- !is.na(method_a1) & !is.na(method_a2) &
+    !is.na(scoring_a1) & !is.na(scoring_a2) &
+    !method_a1 %in% c("", "0") &
+    !method_a2 %in% c("", "0") &
+    !scoring_a1 %in% c("", "0") &
+    !scoring_a2 %in% c("", "0") &
+    method_a1 != method_a2 &
+    scoring_a1 != scoring_a2
+  
+  same <- valid &
+    method_a1 == scoring_a1 &
+    method_a2 == scoring_a2
+  
+  swapped <- valid &
+    method_a1 == scoring_a2 &
+    method_a2 == scoring_a1
+  
+  same[is.na(same)] <- FALSE
+  swapped[is.na(swapped)] <- FALSE
+  
+  if (any(!(same | swapped))) {
+    bad_markers <- unique(results$marker[!(same | swapped)])
+    stop(
+      source_name, " allele mismatch for: ",
+      paste(utils::head(bad_markers, 10), collapse = ", ")
+    )
+  }
+  
+  # Express every direction relative to scoring allele1
+  multiplier <- ifelse(same, 1, -1)
+  
+  direction_value <- as.numeric(results[[value_col]]) * multiplier
+  
+  direction_table <- data.frame(
+    phenotype = as.character(results$phenotype),
+    marker = as.character(results$marker),
+    direction_value = direction_value,
+    p_value = results$p_value,
+    direction = sign(direction_value),
+    direction_source = source_name,
+    direction_allele = scoring_a1,
+    other_allele = scoring_a2,
+    allele_alignment = ifelse(same, "matched", "swapped"),
+    stringsAsFactors = FALSE
+  )
+  
+  if (anyDuplicated(direction_table[c("phenotype", "marker")])) {
+    stop("Duplicate selected results for ", source_name)
+  }
+  
+  message(
+    source_name, ": ",
+    sum(same), " matched allele pairs; ",
+    sum(swapped), " swapped pairs."
+  )
+  
+  direction_table
 }
-
 
 # infer_adaptive_snp_direction()
 # Infer adaptive direction for primary lead SNPs
@@ -49,7 +145,9 @@ infer_adaptive_snp_direction <- function(
     primary_lead_snps,
     gemma_results,
     rda_results,
-    lfmm_results
+    lfmm_results,
+    scoring_map,
+    q_threshold
 ) {
   
   primary_snps <- primary_lead_snps %>%
@@ -64,25 +162,31 @@ infer_adaptive_snp_direction <- function(
   gemma_direction <- make_direction_table(
     method_results = gemma_results,
     value_col = "beta",
-    source_name = "GEMMA"
+    source_name = "GEMMA",
+    scoring_map = scoring_map,
+    q_threshold = q_threshold
   )
   
   # RDA -> direction from oriented_rda_loading
   rda_direction <- make_direction_table(
     method_results = rda_results,
     value_col = "oriented_rda_loading",
-    source_name = "RDA"
+    source_name = "RDA",
+    scoring_map = scoring_map,
+    q_threshold = q_threshold
   )
   
   # LFMM -> direction from z_score
   lfmm_direction <- make_direction_table(
     method_results = lfmm_results,
     value_col = "z_score",
-    source_name = "LFMM"
+    source_name = "LFMM",
+    scoring_map = scoring_map,
+    q_threshold = q_threshold
   )
   
   # Add direction to primary lead SNPs
-  primary_snps %>%
+  final_directions <- primary_snps %>%
     left_join(
       gemma_direction %>%
         dplyr::select(
@@ -133,6 +237,14 @@ infer_adaptive_snp_direction <- function(
         TRUE ~ NA_character_
       )
     )
+  
+  direction_audit <- dplyr::bind_rows(gemma_direction, rda_direction, lfmm_direction)
+  direction_audit <- direction_audit %>%
+    dplyr::semi_join(primary_snps, by = c("phenotype", "marker"))
+  
+  attr(final_directions, "direction_audit") <- direction_audit
+  
+  return(final_directions)
 }
 
 
@@ -269,7 +381,8 @@ run_adaptive_germplasm_scoring <- function(
     metadata,
     output_dir = "Output/AdaptiveScoring",
     sample_col = "SeedID",
-    overwrite = FALSE
+    overwrite = FALSE,
+    q_threshold = config$consensus$q_threshold
 ) {
   
   message("\nRunning accession-level directional germplasm scoring")
@@ -280,26 +393,6 @@ run_adaptive_germplasm_scoring <- function(
   ) {
     stop("No primary lead SNPs found.")
   }
-
-  # Direction of each selected SNP
-  direction_table <- infer_adaptive_snp_direction(
-    primary_lead_snps = primary_lead_snps,
-    gemma_results = gemma_results,
-    rda_results = rda_results,
-    lfmm_results = lfmm_results
-  )
-  
-  write_csv(direction_table, file.path(output_dir, "adaptive_snp_direction_table.csv"))
-  
-  # Summarize direction sources
-  direction_summary <- direction_table %>%
-    count(
-      phenotype,
-      direction_source,
-      name = "n_snps"
-    )
-  
-  write_csv(direction_summary, file.path(output_dir, "adaptive_snp_direction_summary.csv"))
   
   # Read PLINK genotype data
   qc_obj <- plink_to_bigSNP(
@@ -310,6 +403,29 @@ run_adaptive_germplasm_scoring <- function(
   geno <- qc_obj$genotypes
   map <- qc_obj$map
   fam <- qc_obj$fam
+
+  # Direction of each selected SNP
+  direction_table <- infer_adaptive_snp_direction(
+    primary_lead_snps = primary_lead_snps,
+    gemma_results = gemma_results,
+    rda_results = rda_results,
+    lfmm_results = lfmm_results,
+    scoring_map = map,
+    q_threshold = q_threshold
+  )
+  
+  write_csv(direction_table, file.path(output_dir, "adaptive_snp_direction_table.csv"))
+  write_csv(attr(direction_table, "direction_audit"), file.path(output_dir, "direction_allele_audit.csv"))
+  
+  # Summarize direction sources
+  direction_summary <- direction_table %>%
+    count(
+      phenotype,
+      direction_source,
+      name = "n_snps"
+    )
+  
+  write_csv(direction_summary, file.path(output_dir, "adaptive_snp_direction_summary.csv"))
   
   # Score accessions separately for each environmental variable
   score_list <- list()

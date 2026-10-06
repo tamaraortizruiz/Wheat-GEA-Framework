@@ -460,22 +460,27 @@ run_stage("rda", {
   } else {
     # Load QC + LD stages
     qc_result <- load_qc_stage(config)
-    ld_result <- load_ld_pruning_stage(config)
-    ld_obj <- plink_to_bigSNP(
-      bed_file = paste0(ld_result$ld_prefix, ".bed"),
+    if (isTRUE(config$rda$use_full_qc)) {
+      rda_prefix <- qc_result$qc_prefix
+    } else {
+      ld_result <- load_ld_pruning_stage(config)
+      rda_prefix <- ld_result$ld_prefix
+    }
+    rda_obj <- plink_to_bigSNP(
+      bed_file = paste0(rda_prefix, ".bed"),
       overwrite = overwrite
     )
     # Run RDA
     rda_results <- run_rda_all_variables(
       config = config,
-      geno = ld_obj$genotypes,
-      map = ld_obj$map,
-      fam = ld_obj$fam,
+      geno = rda_obj$genotypes,
+      map = rda_obj$map,
+      fam = rda_obj$fam,
       climate_data = qc_result$climate_data,
       phenotypes = config$env$vars
     )
     save_pipeline_stage(list(output_files = rda_files), config, "rda")
-    rm(ld_obj)
+    rm(rda_obj)
     gc()
   }
 })

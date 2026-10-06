@@ -62,7 +62,7 @@ files are reused.
 To run only selected stages, pass a comma separated list:
 
 ``` bash
-Rscript Scripts/run_pipeline.R --stages consensus,consensus_ld,primary_snps
+Rscript run_pipeline.R --stages consensus,consensus_ld,primary_snps
 ```
 
 Each completed stage is recorded in `Output/PipelineStages/pipeline_manifest.csv`.
