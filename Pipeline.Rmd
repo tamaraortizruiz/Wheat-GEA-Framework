@@ -54,39 +54,35 @@ consensus_results <- if (consensus_files_exist(config, config$env$vars)) load_co
 ld_results <- if (ld_block_files_exist(config, config$env$vars)) load_ld_block_results(config) else NULL
 
 # File outputs
-primary_files <- file.path(
-  config$ld_pruning_ph$output_dir,
-  c("primary_ld_summary.csv", "final_primary_ld_pruned_snps.csv")
-  )
+primary_files <- file.path(config$ld_pruning_ph$output_dir, c("primary_ld_summary.csv", "final_primary_ld_pruned_snps.csv"))
 primary <- if (has_files(primary_files) && primary_snp_files_match_config(config)) load_primary_snp_results(config) else NULL
-adaptive_files <- file.path(
-  config$adaptive_scoring$output_dir,
-  c(
+
+adaptive_files <- file.path(config$adaptive_scoring$output_dir, c(
   "adaptive_snp_direction_table.csv", "adaptive_snp_direction_summary.csv",
   "accession_directional_scores.csv", "top_50_directionally_extreme_accessions_by_variable.csv",
-  "top_50_higher_direction_accessions_by_variable.csv", "top_50_lower_direction_accessions_by_variable.csv",
+  "top_50_higher_direction_accessions_by_variable.csv",
+  "top_50_lower_direction_accessions_by_variable.csv",
   "directional_score_summary_by_variable.csv"
 )
 )
 adaptive_results <- if (has_files(adaptive_files)) load_adaptive_scoring_results(config) else NULL
-bio_file <- file.path(
-  config$biological_interpretation$output_dir,
-  "mapped_candidate_genes_annotated.rds"
-  )
+
+bio_file <- file.path(config$biological_interpretation$output_dir, "mapped_candidate_genes_annotated.rds")
 biointerp_df <- if (file.exists(bio_file)) load_biointerpretation_results(config) else NULL
-candidate_gene_file <- file.path(
-  config$biological_interpretation$output_dir,
-  "candidate_gene_summary.rds"
-  )
-candidate_gene_csv <- file.path(
-  config$biological_interpretation$output_dir,
-  "candidate_gene_summary.csv"
-  )
+
+candidate_gene_file <- file.path(config$biological_interpretation$output_dir, "candidate_gene_summary.rds")
+candidate_gene_csv <- file.path(config$biological_interpretation$output_dir, "candidate_gene_summary.csv")
 candidate_gene_summary <- if (file.exists(candidate_gene_file)) {
   load_candidate_gene_summary(config)
 } else if (file.exists(candidate_gene_csv)) {
   read.csv(candidate_gene_csv, check.names = FALSE)
 } else NULL
+
+annotation_file <- file.path(config$biological_interpretation$output_dir, "candidate_gene_annotations_long.rds")
+candidate_annotations <- if (file.exists(annotation_file)) load_candidate_annotations(config) else NULL
+
+annotation_plots_file <- file.path(config$biological_interpretation$output_dir, "annotation_plots.rds")
+annotation_plots <- if (file.exists(annotation_plots_file)) load_annotation_plots(config) else NULL
 
 # Reactable settings
 show_table <- function(x, page_size = 10) {
@@ -422,6 +418,62 @@ plot_primary_qtl(primary$lead_snps, paste0(qc_result$qc_prefix, ".bim"),
 
 # Biological Interpretation
 
-```{r, eval=!is.null(candidate_gene_summary)}
-candidate_gene_summary %>% show_table()
+## Candidate genes and annotations
+
+Expand a gene row to view its full functional and transcription factor annotations.
+
+```{r candidate-annotation-table, eval=!is.null(candidate_gene_summary) && !is.null(candidate_annotations)}
+show_candidate_annotation_table(
+  candidate_gene_summary,
+  candidate_annotations
+)
+```
+
+## Annotation coverage
+
+Genes can have several annotation types.
+
+```{r annotation-coverage, eval=!is.null(candidate_annotations), results='asis', fig.width=12, fig.height=7}
+for (variable in unique(candidate_gene_summary$phenotype)) {
+  gene_data <- candidate_gene_summary %>%
+    dplyr::filter(.data$phenotype == .env$variable)
+  annotation_data <- candidate_annotations %>%
+    dplyr::filter(.data$phenotype == .env$variable)
+  p <- plot_annotation_coverage(gene_data, annotation_data)
+  if (!is.null(p)) {
+    cat("\n\n### ", variable, "\n\n", sep = "")
+    print(p)
+  }
+}
+```
+
+## Transcription factor families
+
+```{r annotation-tf-families, eval=!is.null(candidate_annotations), results='asis', fig.width=10, fig.height=6}
+for (variable in unique(candidate_gene_summary$phenotype)) {
+  annotation_data <- candidate_annotations %>%
+    dplyr::filter(.data$phenotype == .env$variable)
+  p <- plot_tf_families(annotation_data)
+  if (!is.null(p)) {
+    cat("\n\n### ", variable, "\n\n", sep = "")
+    print(p)
+  }
+}
+```
+
+## Functional annotation terms
+
+These plots show annotation frequencies among candidate genes (not enrichment).
+
+```{r annotation-terms, eval=!is.null(annotation_plots), results='asis', fig.width=12, fig.height=9}
+for (variable in names(annotation_plots$by_variable)) {
+  cat("\n\n### ", variable, "\n\n", sep = "")
+  for (type in names(annotation_plots$by_variable[[variable]])) {
+    p <- annotation_plots$by_variable[[variable]][[type]]
+    if (!is.null(p)) {
+      cat("\n\n#### ", type, "\n\n", sep = "")
+      print(p)
+    }
+  }
+}
 ```

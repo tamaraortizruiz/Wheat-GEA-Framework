@@ -22,7 +22,8 @@ cran_packages <- c(
   "pcadapt",
   "igraph",
   "htmltools",
-  "patchwork"
+  "patchwork",
+  "stringr"
 )
 
 bio_packages <- c(

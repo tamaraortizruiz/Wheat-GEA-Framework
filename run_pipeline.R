@@ -633,15 +633,19 @@ run_stage("adaptive_scoring", {
 
 # Biological interpretation module stage
 run_stage("bio_interp", {
-  bio_file <- file.path(
-    config$biological_interpretation$output_dir,
-    "mapped_candidate_genes_annotated.rds"
+  bio_files <- file.path(config$biological_interpretation$output_dir, c(
+    "mapped_candidate_genes_annotated.rds",
+    "candidate_gene_summary.rds",
+    "candidate_gene_annotations_long.rds",
+    "annotation_plots.rds"
+    )
   )
-  if (!overwrite && file.exists(bio_file)) {
-    message("Reusing saved biological-interpretation results.")
+  # Load primary set stage
+  primary <- load_primary_snp_results(config)
+  # Reuse results only when all required outputs exist
+  if (!overwrite && all(file.exists(bio_files))) {
+    message("Reusing saved biological interpretation results.")
   } else {
-    # Load primary set stage
-    primary <- load_primary_snp_results(config)
     # Run biological interpretation
     biointerp_df <- run_biointerpretation_workflow(
       config = config,
@@ -650,8 +654,15 @@ run_stage("bio_interp", {
     )
   }
   save_pipeline_stage(
-    list(primary_set = load_primary_snp_results(config)$set, output_file = bio_file),
-    config, "bio_interp"
+    list(
+      primary_set = primary$set,
+      output_file = bio_files[1],
+      candidate_gene_file = bio_files[2],
+      annotation_file = bio_files[3],
+      plots_file = bio_files[4]
+    ),
+    config,
+    "bio_interp"
   )
 })
 

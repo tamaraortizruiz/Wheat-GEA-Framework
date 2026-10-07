@@ -200,6 +200,35 @@ load_candidate_gene_summary <- function(config) {
   readRDS(path)
 }
 
+# load_candidate_annotations()
+# Loads full candidate-gene annotation records, including TF annotations
+# config = Pipeline configuration object
+# Returns: Long-format candidate annotation table
+load_candidate_annotations <- function(config) {
+  path <- file.path(config$biological_interpretation$output_dir, "candidate_gene_annotations_long.rds")
+  
+  if (!file.exists(path)) {
+    stop("Saved candidate annotations were not found")
+  }
+  
+  readRDS(path)
+}
+
+
+# load_annotation_plots()
+# Loads saved biological interpretation plots
+# config = Pipeline configuration object
+# Returns: List containing coverage, TF family and per-variable plots
+load_annotation_plots <- function(config) {
+  path <- file.path(config$biological_interpretation$output_dir, "annotation_plots.rds")
+  
+  if (!file.exists(path)) {
+    stop("Saved annotation plots were not found")
+  }
+  
+  readRDS(path)
+}
+
 # update_pipeline_manifest()
 # Tracks status of the latest execution of the pipeline (completed stages, execution time)
 update_pipeline_manifest <- function(config, stage, status, started, finished) {

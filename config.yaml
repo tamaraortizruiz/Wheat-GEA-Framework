@@ -2,7 +2,7 @@ project:
   name: "Bread Wheat GEA Pipeline"
   
 run:
-  overwrite: TRUE # if TRUE, deletes all existing files and reruns the pipeline from scratch
+  overwrite: FALSE # if TRUE, deletes all existing files and reruns the pipeline from scratch
 
 plink:
   path: "/Users/tamaraortiz/plink_mac_20250819/plink" # Local PLINK path
@@ -148,10 +148,11 @@ adaptive_scoring:
   
 # Biological interpretation
 biological_interpretation:
-  gene_annotation_file: "RawData/IWGSC_RefSeq_v2.1_annotation.gff3" # Wheat annotation file (DNC unless adapting for other crops)
   output_dir: "Output/BioInterpretation" #DNC
   flank_bp: 10000
-  use_biomart: true
+  use_biomart: false
+  gene_annotation_file: "RawData/IWGSC_RefSeq_v2.1_annotation.gff3" # Wheat annotation file (DNC unless adapting for other crops)
+  functional_annotation_file: "RawData/iwgsc_refseqv2.1_functional_annotation.csv"
   tf_annotation_file: "RawData/wheatpro_TFlist_GRN.csv" # Optional user-defined TF annotation file
   
 # Serialized stage results used by Pipeline.Rmd
