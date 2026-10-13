@@ -152,7 +152,7 @@ biological_interpretation:
   flank_bp: 10000
   use_biomart: false
   gene_annotation_file: "RawData/IWGSC_RefSeq_v2.1_annotation.gff3" # Wheat annotation file (DNC unless adapting for other crops)
-  functional_annotation_file: "RawData/iwgsc_refseqv2.1_functional_annotation.csv"
+  functional_annotation_file: "RawData/iwgsc_refseqv2.1_functional_annotation.csv" # Wheat functional annotation file (DNC unless adapting for other crops)
   tf_annotation_file: "RawData/wheatpro_TFlist_GRN.csv" # Optional user-defined TF annotation file
   
 # Serialized stage results used by Pipeline.Rmd

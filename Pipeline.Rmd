@@ -85,9 +85,32 @@ annotation_plots_file <- file.path(config$biological_interpretation$output_dir, 
 annotation_plots <- if (file.exists(annotation_plots_file)) load_annotation_plots(config) else NULL
 
 # Reactable settings
-show_table <- function(x, page_size = 10) {
-  reactable::reactable(x, sortable = TRUE, filterable = TRUE, searchable = TRUE,
-                       pagination = TRUE, defaultPageSize = page_size)
+show_table <- function(x, page_size = 10, columns = NULL, digits = 3) {
+  # Number formatting
+  format_number <- function(value) {
+    if (!is.numeric(value)) return(value)
+    if (is.na(value)) return("—")
+    if (!is.finite(value)) return(as.character(value))
+    if (value == trunc(value)) return(sprintf("%.0f", value))
+    if (abs(value) < 10^(-digits)) {
+      return(formatC(value, format = "e", digits = digits))
+    }
+    formatC(value, format = "f", digits = digits)
+  }
+
+  reactable::reactable(
+    x,
+    sortable = TRUE,
+    filterable = TRUE,
+    searchable = TRUE,
+    pagination = TRUE,
+    defaultPageSize = page_size,
+    columns = columns,
+    defaultColDef = reactable::colDef(
+      na = "—",
+      cell = format_number
+    )
+  )
 }
 ```
 
@@ -359,7 +382,14 @@ htmltools::tagList(sections)
 
 ```{r, eval=!is.null(ld_results)}
 ld_results$summary %>%
-  dplyr::select(-dplyr::any_of(c("n_ld_blocks", "median_min_q"))) %>% show_table()
+  dplyr::select(-dplyr::any_of(c("n_ld_blocks", "median_min_q", "evidence_score"))) %>% 
+  show_table(
+    columns = list(
+      n_snps_pre_ld = colDef(name = "# SNPs pre LD"),
+      n_lead_snps_post_ld = colDef(name = "# SNPs post LD"),
+      ld_retention_rate = colDef(name = "LD retention rate")
+    )
+  )
 ```
 
 # Primary LD-Pruned SNP Set
@@ -368,7 +398,14 @@ ld_results$summary %>%
 
 ```{r, eval=!is.null(primary)}
 primary$summary %>%
-  dplyr::select(-dplyr::any_of(c("n_ld_blocks", "median_min_q"))) %>% show_table()
+  dplyr::select(-dplyr::any_of(c("n_ld_blocks", "median_min_q"))) %>%
+  show_table(
+    columns = list(
+      n_snps_pre_ld = colDef(name = "# SNPs pre LD"),
+      n_lead_snps_post_ld = colDef(name = "# SNPs post LD"),
+      ld_retention_rate = colDef(name = "LD retention rate")
+    )
+  )
 ```
 
 ## Lead SNPs across all variables
@@ -376,15 +413,40 @@ primary$summary %>%
 ```{r, eval=!is.null(primary)}
 primary$lead_snps %>%
   dplyr::select(-dplyr::any_of(c("methods", "n_env_methods", "min_env_p", "min_env_q",
-                                 "consensus_set", "ld_block", "max_r2_in_block"))) %>% show_table()
+                                 "consensus_set", "ld_block", "max_r2_in_block"))) %>%
+  show_table(
+    columns = list(
+      env_methods = colDef(name = "Env. methods"),
+      pcadapt_support = colDef(name = "pcadapt support")
+    )
+  )
 ```
 
 # Adaptive Germplasm Scoring
 
+For each environmental variable, each accession is scored using the 
+LD-processed lead SNPs from the configured primary consensus set.
+
+| Report column | Interpretation |
+|:---|:---|
+| `Adaptive score` | Oriented dosage sum divided by twice the number of non-missing scored SNPs. **Values from 0 to 1**. Values near 1 indicate a greater proportion of alleles associated with higher environmental values; values near 0 indicate a greater proportion associated with lower values. |
+| `Directional score` | The centered score, calculated as `2 × adaptive_score − 1`. **Values from −1 to +1**. Positive values indicate a profile toward higher environmental values; negative values indicate a profile toward lower values. 0 represents a balanced average dosage |
+| `Absolute directional score` | **Values from 0 to 1**. Describes how strongly a profile points toward either end of the environmental gradient. |
+| `Directional label` | Indicates whether the score points toward higher or lower environmental values. |
+| `Extremeness rank` | Rank number when accessions are ordered by decreasing absolute directional score. |
+
 ## Summary
 
 ```{r, eval=!is.null(adaptive_results)}
-adaptive_results$directional_score_summary %>% show_table()
+adaptive_results$directional_score_summary %>%
+  show_table(
+    columns = list(
+      median_scored_snp_fraction = colDef(name = "Median scored SNP fraction"),
+      directional_score_min = colDef(name = "Directional score min."),
+      directional_score_median = colDef(name = "Directional score median"),
+      directional_score_max = colDef(name = "Directional score max.")
+    )
+  )
 ```
 
 ```{r top-extreme-accessions, echo=FALSE}
@@ -402,7 +464,18 @@ sections <- lapply(unique(top_accessions$phenotype), function(phenotype) {
     htmltools::tags$h2(
       paste0("Top directionally extreme accessions: ", phenotype)
     ),
-    show_table(table_data)
+    show_table(
+      table_data,
+      columns = list(
+        adaptive_score = colDef(name = "Adaptive score"),
+        directional_score = colDef(name = "Directional score"),
+        absolute_directional_score = colDef(name = "Absolute directional score"),
+        direction_label = colDef(name = "Directional label"),
+        adaptive_dosage_sum = colDef(name = "Adaptive dosage sum"),
+        max_possible_dosage = colDef(name = "Max. possible dosage"),
+        extremeness_rank = colDef(name = "Extremeness rank")
+        )
+      )
   )
 })
 
